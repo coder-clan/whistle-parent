@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(scanBasePackages = "org.coderclan")
+@SpringBootApplication
 @EnableScheduling
 public class ProducerApplication {
     public static void main(String[] args) {

@@ -16,7 +16,6 @@ import java.util.Queue;
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
-@Component
 public class TransactionEventHandler {
     private static final Logger logger = LoggerFactory.getLogger(TransactionEventHandler.class);
     private static final ThreadLocal<Queue<Event<?>>> message = new ThreadLocal<>();

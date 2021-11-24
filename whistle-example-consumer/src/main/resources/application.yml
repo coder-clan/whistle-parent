@@ -2,9 +2,6 @@ logging:
   level:
     org:
       coderclan: debug
-      springframework:
-        cloud:
-          stream: trace
 server:
   port: 0
 spring:

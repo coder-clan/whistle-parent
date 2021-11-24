@@ -1,6 +1,9 @@
 package org.coderclan.whistle;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.coderclan.whistle.api.EventConsumer;
+import org.coderclan.whistle.api.EventContent;
+import org.coderclan.whistle.api.EventService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -8,23 +11,32 @@ import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.GenericBeanDefinition;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.integration.annotation.ServiceActivator;
+import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.Header;
 
 import javax.annotation.PostConstruct;
+import javax.sql.DataSource;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
 @Configuration
 @PropertySource(value = "classpath:org/coderclan/whistle/spring-cloud-stream.properties", encoding = "UTF-8")
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
 public class WhistleConfiguration implements ApplicationContextAware {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
 
@@ -94,5 +106,62 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ServiceActivator(inputChannel = "errorChannel")
     public void errors(Message<?> error) {
         System.out.println("Error: " + error);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean
+    public EventPersistenter eventPersistenter() {
+        return new EventPersistenter();
+    }
+
+    @Bean
+    @ConditionalOnBean({DataSource.class, EventPersistenter.class})
+    @ConditionalOnMissingBean
+    public FailedEventRetrier failedEventRetrier(DataSource ds, EventPersistenter persistenter,
+                                                 ObjectMapper objectMapper, EventTypeRegistrar typeRegistrar) {
+        return new FailedEventRetrier(ds, persistenter, objectMapper, typeRegistrar);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public EventService eventService() {
+        return new EventServiceImpl();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public TransactionEventHandler transactionEventHandler() {
+        return new TransactionEventHandler();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    EventTypeRegistrar eventTypeRegistrar() {
+        return new EventTypeRegistrar();
+    }
+    @Bean
+    @ConditionalOnMissingBean
+    EventContentMessageConverter eventContentMessageConverter(){
+        return new EventContentMessageConverter();
+    }
+
+    @Bean
+    public Supplier<Message<EventContent>> supplier() {
+        return () -> {
+            while (true) {
+                try {
+                    Event<? extends EventContent> event = Constants.queue.take();
+
+                    return MessageBuilder.<EventContent>withPayload(event.getContent())
+                            .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())
+                            .setHeader(Constants.EVENT_PERSISTENT_ID_HEADER, event.getPersistentEventId())
+                            .build();
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+        };
     }
 }

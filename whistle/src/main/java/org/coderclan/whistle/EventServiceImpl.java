@@ -13,8 +13,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
-@Component
-//@ConditionalOnMissingBean(EventService.class)
 public class EventServiceImpl implements EventService {
     private static final Logger log = LoggerFactory.getLogger(EventServiceImpl.class);
 

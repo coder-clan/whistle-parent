@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
@@ -21,8 +22,6 @@ import java.sql.*;
 /**
  * Created by aray(dot)chou(dot)cn(at)gmail(dot)com on 1/18/2018.
  */
-@Component
-//@ConditionalOnBean(DataSource.class)
 public class EventPersistenter implements ApplicationListener {
     private static final Logger log = LoggerFactory.getLogger(EventPersistenter.class);
     @Autowired

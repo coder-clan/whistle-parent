@@ -1,7 +1,6 @@
 logging:
   level:
-    org:
-      coderclan: trace
+    org.coderclan: trace
 
 server:
   port: 0

@@ -20,7 +20,6 @@ import java.util.Objects;
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
-@Component
 public class EventContentMessageConverter implements MessageConverter {
 
 

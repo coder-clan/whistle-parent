@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
-import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -22,7 +21,6 @@ import java.util.Objects;
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
-@Component
 public class FailedEventRetrier implements Runnable, ApplicationListener<ApplicationReadyEvent> {
     private static final Logger log = LoggerFactory.getLogger(FailedEventRetrier.class);
 
@@ -30,14 +28,14 @@ public class FailedEventRetrier implements Runnable, ApplicationListener<Applica
     private final EventPersistenter persistenter;
     private final ObjectMapper objectMapper;
 
-    @Autowired
     private EventTypeRegistrar eventTypeRegistrar;
 
 
-    public FailedEventRetrier(@Autowired(required = false) DataSource ds, EventPersistenter persistenter, ObjectMapper objectMapper) {
+    public FailedEventRetrier(@Autowired(required = false) DataSource ds, EventPersistenter persistenter, ObjectMapper objectMapper, EventTypeRegistrar eventTypeRegistrar) {
         this.ds = ds;
         this.persistenter = persistenter;
         this.objectMapper = objectMapper;
+        this.eventTypeRegistrar = eventTypeRegistrar;
     }
 
     @Override
@@ -88,6 +86,9 @@ public class FailedEventRetrier implements Runnable, ApplicationListener<Applica
 
                     ResultSet rs = statement.executeQuery(sql);
                     while (rs.next()) {
+                        rs.updateInt(4, rs.getInt(4) + 1);
+                        rs.updateRow();
+
                         EventType<?> type = eventTypeRegistrar.findEventType(rs.getString(2));
                         if (Objects.isNull(type)) {
                             log.error("Unrecognized Event Type: {}.", rs.getString(2));
@@ -97,8 +98,6 @@ public class FailedEventRetrier implements Runnable, ApplicationListener<Applica
                         EventContent eventContent = objectMapper.readValue(rs.getString(3), type.getContentType());
 
                         tempList.add(new Event(rs.getLong(1), type, eventContent));
-                        rs.updateInt(4, rs.getInt(4) + 1);
-                        rs.updateRow();
                     }
                     rs.close();
                     conn.commit();
