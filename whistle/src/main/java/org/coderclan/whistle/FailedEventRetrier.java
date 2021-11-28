@@ -76,7 +76,7 @@ public class FailedEventRetrier implements Runnable, ApplicationListener<Applica
         while (true) {
             try (
                     Connection conn = ds.getConnection();
-                    Statement statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
+                    Statement statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)
             ) {
                 ArrayList<Event<?>> tempList = new ArrayList<>(10);
                 boolean autoCommit = conn.getAutoCommit();
@@ -108,7 +108,6 @@ public class FailedEventRetrier implements Runnable, ApplicationListener<Applica
 
                 for (Event<?> event : tempList) {
                     putEventToQueue(event);
-                    log.info("Requeued persistence event, eventId={} ", event.getPersistentEventId());
                 }
 
                 // Don't sleep if we get MAX_QUEUE_COUNT events. since there may be more failed event in database
@@ -122,9 +121,16 @@ public class FailedEventRetrier implements Runnable, ApplicationListener<Applica
         }
     }
 
-    private <C extends EventContent> void putEventToQueue(Event<?> event) {
+    private <C extends EventContent> void putEventToQueue(Event<C> event) {
+        if (Constants.queue.contains(event)) {
+            log.info("Event (persistentEventId={}) is already in the Sending Queue.", event.getPersistentEventId());
+            return;
+        }
+
         boolean success = Constants.queue.offer(event);
-        if (!success) {
+        if (success) {
+            log.info("Requeued persistence event, eventId={} ", event.getPersistentEventId());
+        } else {
             log.warn("Put event to queue failed.");
         }
     }

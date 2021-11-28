@@ -1,6 +1,7 @@
 package org.coderclan.whistle.api;
 
 import java.io.Serializable;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -11,5 +12,18 @@ public abstract class EventContent implements Serializable {
 
     public String getIdempotentId() {
         return idempotentId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        EventContent content = (EventContent) o;
+        return Objects.equals(idempotentId, content.idempotentId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(idempotentId);
     }
 }

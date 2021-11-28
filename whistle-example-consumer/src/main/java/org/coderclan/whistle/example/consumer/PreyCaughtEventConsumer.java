@@ -21,7 +21,7 @@ public class PreyCaughtEventConsumer implements EventConsumer<PreyInformation> {
     @Override
     public boolean consume(PreyInformation message) throws Exception {
         log.info("Thank God to give us " + message.getNumber() + " " + message.getPreyType() + "(s) for dinner.");
-        if (Math.random()>0.5) {
+        if (Math.random()>0.9) {
             throw new RuntimeException("Come on, here is an error.");
         }
         return true;
