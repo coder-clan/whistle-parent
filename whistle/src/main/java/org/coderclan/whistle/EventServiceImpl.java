@@ -7,7 +7,6 @@ import org.coderclan.whistle.api.EventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
@@ -28,7 +27,7 @@ public class EventServiceImpl implements EventService {
 
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             long persistentEventId = eventPersistenter.persistEvent(type, content);
-            transactionEventHandler.addEvent(new Event<C>(persistentEventId, type, content));
+            transactionEventHandler.addEvent(new Event<>(persistentEventId, type, content));
         } else {
             this.putEventToQueue(-1, type, content);
         }

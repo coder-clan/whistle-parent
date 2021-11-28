@@ -8,12 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.jdbc.datasource.DataSourceUtils;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
@@ -22,7 +19,7 @@ import java.sql.*;
 /**
  * Created by aray(dot)chou(dot)cn(at)gmail(dot)com on 1/18/2018.
  */
-public class EventPersistenter implements ApplicationListener {
+public class EventPersistenter implements ApplicationListener<ContextRefreshedEvent> {
     private static final Logger log = LoggerFactory.getLogger(EventPersistenter.class);
     @Autowired
     private DataSource dataSource;
@@ -34,12 +31,9 @@ public class EventPersistenter implements ApplicationListener {
     private String tableName;
 
 
-
     @Override
-    public void onApplicationEvent(ApplicationEvent applicationEvent) {
-        if (applicationEvent instanceof ContextRefreshedEvent) {
-            createTable();
-        }
+    public void onApplicationEvent(ContextRefreshedEvent applicationEvent) {
+        createTable();
     }
 
     /**
@@ -117,16 +111,17 @@ public class EventPersistenter implements ApplicationListener {
         }
 
     }
+
     public String getSql() {
 
         final String result;
         String db = EventUtil.databaseName(this.dataSource);
         switch (db) {
             case "MySQL":
-                result = "select id,event_type,event_content,retried_count from "  + tableName + " where success=false and update_time<now()- INTERVAL 10 second limit " + Constants.MAX_QUEUE_COUNT + " for update";
+                result = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second limit " + Constants.MAX_QUEUE_COUNT + " for update";
                 break;
             case "H2":
-                result = "select id,event_type,event_content,retried_count from "  + tableName + " where success=false and update_time<DATEADD(second, -10, current_timestamp()) limit " + Constants.MAX_QUEUE_COUNT + " for update";
+                result = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<DATEADD(second, -10, current_timestamp()) limit " + Constants.MAX_QUEUE_COUNT + " for update";
                 break;
             default:
                 throw new RuntimeException("Unsupported Database.");

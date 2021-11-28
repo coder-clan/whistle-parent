@@ -24,14 +24,14 @@ public class EventTypeRegistrar {
             return;
         }
         // init event Types;
-        HashMap<String, EventType<?>> map = new HashMap<>();
+        HashMap<String, EventType<?>> tempMap = new HashMap<>();
         publishingEventType.stream().flatMap(Collection::stream).forEach(type -> {
-            EventType<?> existsType = map.put(type.getName(), type);
+            EventType<?> existsType = tempMap.put(type.getName(), type);
             if ((!Objects.isNull(existsType)) && (!Objects.equals(existsType, type))) {
                 throw new DuplicatedEventTypeException("There are two Event Type with the same name: " + type.getName() + ", they are: " + existsType.getClass().getName() + " and " + type.getClass().getName());
             }
         });
-        this.map = Collections.unmodifiableMap(map);
+        this.map = Collections.unmodifiableMap(tempMap);
     }
 
     public EventType<?> findEventType(String type) {

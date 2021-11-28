@@ -8,9 +8,7 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageHeaders;
 import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.stereotype.Component;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Objects;
@@ -36,7 +34,7 @@ public class EventContentMessageConverter implements MessageConverter {
             Class<?> clazz = Class.forName(type);
             String temp = new String((byte[]) message.getPayload(), StandardCharsets.UTF_8);
             return objectMapper.readValue(temp, clazz);
-        } catch (ClassNotFoundException  e) {
+        } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         } catch (JsonMappingException e) {
             throw new RuntimeException(e);

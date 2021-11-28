@@ -2,7 +2,6 @@ package org.coderclan.whistle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -94,10 +93,13 @@ public class TransactionEventHandler {
             }
             try {
                 for (Event<?> event : q) {
-                    Constants.queue.offer(event);
+                    boolean ret = Constants.queue.offer(event);
+                    if (!ret) {
+                        logger.warn("Put event to sending queue failed. persistentEventId: {}", event.getPersistentEventId());
+                    }
                 }
             } catch (Exception e) {
-                logger.error("", e);
+                logger.error("Put event to sending queue failed.", e);
             }
         }
     };

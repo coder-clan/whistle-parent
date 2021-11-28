@@ -14,14 +14,14 @@ import java.util.function.Consumer;
 public class ConsumerWrapper implements Consumer<EventContent> {
     private static final Logger log = LoggerFactory.getLogger(ConsumerWrapper.class);
 
-    private EventConsumer eventConsumer;
+    private EventConsumer<EventContent> eventConsumer;
 
 
-    public EventConsumer getEventConsumer() {
+    public EventConsumer<EventContent> getEventConsumer() {
         return eventConsumer;
     }
 
-    public void setEventConsumer(EventConsumer eventConsumer) {
+    public void setEventConsumer(EventConsumer<EventContent> eventConsumer) {
         this.eventConsumer = eventConsumer;
     }
 
