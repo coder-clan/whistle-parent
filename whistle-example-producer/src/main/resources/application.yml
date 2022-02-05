@@ -14,3 +14,5 @@ spring:
     username: sa
     password: sa
     driverClassName: org.h2.Driver
+  application:
+    name: whistle-example-producer

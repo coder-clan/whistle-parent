@@ -26,6 +26,7 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.Header;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.Resource;
 import javax.sql.DataSource;
 import java.util.List;
 import java.util.Objects;
@@ -46,6 +47,9 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Autowired(required = false)
     private EventPersistenter persistenter;
 
+    @Resource
+    private String whistleSystemName;
+
     private ApplicationContext applicationContext;
 
     @Override
@@ -59,7 +63,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         if (Objects.isNull(consumers) || consumers.isEmpty())
             return;
 
-        StringBuilder sb = new StringBuilder();
+        StringBuilder beanNames = new StringBuilder();
         // System.setProperty("spring.cloud.stream.function.bindings." + "ackHandler" + "-in-0", "sending-confirm-ack-channel");
 
         int i = 0;
@@ -67,7 +71,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
             i++;
 
             String beanName = "whistleConsumer" + i;
-            sb.append(';').append(beanName);
+            beanNames.append(';').append(beanName);
 
             //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
             System.setProperty("spring.cloud.stream.function.bindings." + beanName + "-in-0", c.getSupportEventType().getName());
@@ -82,8 +86,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
         }
 
-        System.setProperty("spring.cloud.function.definition", sb.deleteCharAt(0).toString());
-        System.setProperty("spring.cloud.stream.default.group", "exampleConsumer");
+        System.setProperty("spring.cloud.function.definition", beanNames.deleteCharAt(0).toString());
+        System.setProperty("spring.cloud.stream.default.group", this.whistleSystemName);
     }
 
     /**
@@ -140,9 +144,10 @@ public class WhistleConfiguration implements ApplicationContextAware {
     EventTypeRegistrar eventTypeRegistrar() {
         return new EventTypeRegistrar();
     }
+
     @Bean
     @ConditionalOnMissingBean
-    EventContentMessageConverter eventContentMessageConverter(){
+    EventContentMessageConverter eventContentMessageConverter() {
         return new EventContentMessageConverter();
     }
 
