@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.Objects;
 
 /**
- * Serialize object to JSON, and add object type to headers. Deserialize object to the type specificated by the header.
+ * Serialize object to JSON, and add object type to headers. Deserialize object to the type specified by the header.
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */

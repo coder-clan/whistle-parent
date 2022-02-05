@@ -1,5 +1,7 @@
 package org.coderclan.whistle;
 
+
+import net.jcip.annotations.ThreadSafe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -10,11 +12,12 @@ import java.util.Objects;
 import java.util.Queue;
 
 /**
- * Handle the Event produced in an Database Transaction.
+ * Handle the Event produced in a Database Transaction.
  * The event handled by this handler will be added into the Sending Queue after The Transaction committing.
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
+@ThreadSafe
 public class TransactionEventHandler {
     private static final Logger logger = LoggerFactory.getLogger(TransactionEventHandler.class);
     private static final ThreadLocal<Queue<Event<?>>> message = new ThreadLocal<>();

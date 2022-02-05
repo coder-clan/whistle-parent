@@ -1,5 +1,6 @@
 package org.coderclan.whistle;
 
+import net.jcip.annotations.ThreadSafe;
 import org.coderclan.whistle.api.EventType;
 import org.coderclan.whistle.exception.DuplicatedEventTypeException;
 import org.slf4j.Logger;
@@ -10,11 +11,18 @@ import org.springframework.util.CollectionUtils;
 import javax.annotation.PostConstruct;
 import java.util.*;
 
+/**
+ *
+ */
+@ThreadSafe
 public class EventTypeRegistrar {
     private static final Logger log = LoggerFactory.getLogger(EventTypeRegistrar.class);
     @Autowired(required = false)
     private List<Collection<? extends EventType<?>>> publishingEventType;
 
+    /**
+     * Immutable, created by {@link Collections#unmodifiableMap(Map)}
+     */
     private Map<String, EventType<?>> map;
 
     @PostConstruct

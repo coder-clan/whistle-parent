@@ -1,6 +1,7 @@
 package org.coderclan.whistle;
 
 
+import net.jcip.annotations.ThreadSafe;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
 import org.coderclan.whistle.api.EventType;
@@ -12,6 +13,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
+@ThreadSafe
 public class EventServiceImpl implements EventService {
     private static final Logger log = LoggerFactory.getLogger(EventServiceImpl.class);
 

@@ -2,8 +2,10 @@ package org.coderclan.whistle;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import net.jcip.annotations.ThreadSafe;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventType;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +21,7 @@ import java.sql.*;
 /**
  * Created by aray(dot)chou(dot)cn(at)gmail(dot)com on 1/18/2018.
  */
+@ThreadSafe
 public class EventPersistenter implements ApplicationListener<ContextRefreshedEvent> {
     private static final Logger log = LoggerFactory.getLogger(EventPersistenter.class);
     @Autowired
@@ -55,7 +58,7 @@ public class EventPersistenter implements ApplicationListener<ContextRefreshedEv
 
         // get Collection of current Transaction.
         // do NOT close this connection, it is managed by spring
-        java.sql.Connection dbCon = DataSourceUtils.getConnection(this.dataSource);
+        Connection dbCon = DataSourceUtils.getConnection(this.dataSource);
 
         try (PreparedStatement ps = dbCon.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, type.getName());

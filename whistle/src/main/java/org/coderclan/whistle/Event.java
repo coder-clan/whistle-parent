@@ -1,5 +1,6 @@
 package org.coderclan.whistle;
 
+import net.jcip.annotations.Immutable;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventType;
 
@@ -8,10 +9,11 @@ import java.util.Objects;
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
+@Immutable
 public class Event<C extends EventContent> {
-    private long persistentEventId;
-    private EventType<C> type;
-    private C content;
+    private final long persistentEventId;
+    private final EventType<C> type;
+    private final C content;
 
     public Event(long persistentEventId, EventType<C> type, C content) {
         this.persistentEventId = persistentEventId;
