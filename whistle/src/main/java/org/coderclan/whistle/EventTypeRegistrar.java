@@ -23,7 +23,7 @@ public class EventTypeRegistrar {
     /**
      * Immutable, created by {@link Collections#unmodifiableMap(Map)}
      */
-    private Map<String, EventType<?>> map;
+    private volatile Map<String, EventType<?>> map;
 
     @PostConstruct
     public void init() {

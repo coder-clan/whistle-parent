@@ -3,6 +3,8 @@ package org.coderclan.whistle;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageHeaders;
@@ -19,7 +21,7 @@ import java.util.Objects;
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
 public class EventContentMessageConverter implements MessageConverter {
-
+    private static final Logger log = LoggerFactory.getLogger(EventContentMessageConverter.class);
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -28,6 +30,7 @@ public class EventContentMessageConverter implements MessageConverter {
     public Object fromMessage(Message<?> message, Class<?> targetClass) {
         String type = (String) message.getHeaders().get(Constants.CONTENT_JAVA_TYPE_HEADER);
         if (Objects.isNull(type) || type.isEmpty()) {
+            log.error("Message without Type Header received!");
             return null;
         }
         try {

@@ -30,7 +30,7 @@ public class TransactionEventHandler {
      */
     public void addEvent(Event<?> event) {
         if (Objects.isNull(message.get())) {
-            // first time call this method
+            // first time calling this method
 
             // init ThreadLocal Variable
             message.set(new ArrayDeque<>());

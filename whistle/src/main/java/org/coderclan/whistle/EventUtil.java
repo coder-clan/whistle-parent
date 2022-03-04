@@ -52,8 +52,11 @@ public class EventUtil {
         try {
             log.error(message, e);
         } catch (Exception e1) {
-            e.printStackTrace();
-            e1.printStackTrace();
+            try {
+                e.printStackTrace();
+                e1.printStackTrace();
+            } catch (Exception e2) {
+            }
         }
     }
 

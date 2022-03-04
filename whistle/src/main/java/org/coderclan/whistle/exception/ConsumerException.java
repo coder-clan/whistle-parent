@@ -1,5 +1,8 @@
 package org.coderclan.whistle.exception;
+
 /**
+ * Wrap any uncaught Exception throwed by Event Consumers.
+ *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
 public class ConsumerException extends RuntimeException {

@@ -55,16 +55,18 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
-
     }
 
     @PostConstruct
     public void init() {
+        registerEventConsumers();
+    }
+
+    private void registerEventConsumers() {
         if (Objects.isNull(consumers) || consumers.isEmpty())
             return;
 
         StringBuilder beanNames = new StringBuilder();
-        // System.setProperty("spring.cloud.stream.function.bindings." + "ackHandler" + "-in-0", "sending-confirm-ack-channel");
 
         int i = 0;
         for (EventConsumer c : this.consumers) {
@@ -73,21 +75,25 @@ public class WhistleConfiguration implements ApplicationContextAware {
             String beanName = "whistleConsumer" + i;
             beanNames.append(';').append(beanName);
 
-            //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
-            System.setProperty("spring.cloud.stream.function.bindings." + beanName + "-in-0", c.getSupportEventType().getName());
-
-            GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
-            beanDefinition.setBeanClass(ConsumerWrapper.class);
-
-            MutablePropertyValues mpv = new MutablePropertyValues();
-            beanDefinition.setPropertyValues(mpv);
-            mpv.add("eventConsumer", c);
-            ((BeanDefinitionRegistry) (this.applicationContext)).registerBeanDefinition(beanName, beanDefinition);
-
+            registerConsumer(c, beanName);
         }
 
         System.setProperty("spring.cloud.function.definition", beanNames.deleteCharAt(0).toString());
         System.setProperty("spring.cloud.stream.default.group", this.whistleSystemName);
+    }
+
+    private void registerConsumer(EventConsumer c, String beanName) {
+        //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
+        System.setProperty("spring.cloud.stream.function.bindings." + beanName + "-in-0", c.getSupportEventType().getName());
+
+        GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
+        beanDefinition.setBeanClass(ConsumerWrapper.class);
+
+        MutablePropertyValues mpv = new MutablePropertyValues();
+        beanDefinition.setPropertyValues(mpv);
+        mpv.add("eventConsumer", c);
+
+        ((BeanDefinitionRegistry) (this.applicationContext)).registerBeanDefinition(beanName, beanDefinition);
     }
 
     /**
