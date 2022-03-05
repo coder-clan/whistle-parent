@@ -16,11 +16,6 @@ public class ConsumerWrapper implements Consumer<EventContent> {
 
     private EventConsumer<EventContent> eventConsumer;
 
-
-    public EventConsumer<EventContent> getEventConsumer() {
-        return eventConsumer;
-    }
-
     public void setEventConsumer(EventConsumer<EventContent> eventConsumer) {
         this.eventConsumer = eventConsumer;
     }

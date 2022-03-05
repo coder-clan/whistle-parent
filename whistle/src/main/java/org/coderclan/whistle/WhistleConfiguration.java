@@ -25,6 +25,7 @@ import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.support.ErrorMessage;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
@@ -116,8 +117,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @ServiceActivator(inputChannel = "errorChannel")
-    public void errors(Message<?> error) {
-        System.out.println("Error: " + error);
+    public void errors(ErrorMessage error) {
+        log.error("Error countered", error.getPayload());
     }
 
     @Bean
