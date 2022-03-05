@@ -4,6 +4,8 @@ import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventType;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
@@ -20,6 +22,7 @@ public interface EventPersistenter {
      *
      * @param persistentEventId
      */
-    @Transactional(rollbackFor = Exception.class)
     void confirmEvent(long... persistentEventId);
+
+    List<Event<?>> retrieveUnconfirmedEvent(int count);
 }

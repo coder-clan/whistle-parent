@@ -1,6 +1,5 @@
 package org.coderclan.whistle;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.coderclan.whistle.api.EventConsumer;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
@@ -129,11 +128,10 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, DatabaseEventPersistenter.class})
+    @ConditionalOnBean({EventPersistenter.class})
     @ConditionalOnMissingBean
-    public DatabaseFailedEventRetrier failedEventRetrier(DataSource ds, DatabaseEventPersistenter persistenter,
-                                                         ObjectMapper objectMapper, EventTypeRegistrar typeRegistrar) {
-        return new DatabaseFailedEventRetrier(ds, persistenter, objectMapper, typeRegistrar);
+    public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter) {
+        return new FailedEventRetrier(persistenter);
     }
 
     @Bean

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import net.jcip.annotations.ThreadSafe;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventType;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Created by aray(dot)chou(dot)cn(at)gmail(dot)com on 1/18/2018.
@@ -29,6 +32,9 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
 
     @Autowired
     private ObjectMapper mapper;
+
+    @Autowired
+    private EventTypeRegistrar eventTypeRegistrar;
 
     @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}")
     private String tableName;
@@ -95,6 +101,48 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
         }
     }
 
+    /**
+     * Retrieve unconfirmed event.
+     *
+     * @param count Max number of events to retrieve.
+     * @return
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<Event<?>> retrieveUnconfirmedEvent(int count) {
+        try (
+                Connection conn = dataSource.getConnection();
+                Statement statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)
+        ) {
+            ArrayList<Event<?>> tempList = new ArrayList<>();
+
+            // set auto commit to false to lock row in database to prevent other thread to requeue.
+            conn.setAutoCommit(false);
+
+            ResultSet rs = statement.executeQuery(this.getSql(count));
+            while (rs.next()) {
+                rs.updateInt(4, rs.getInt(4) + 1);
+                rs.updateRow();
+
+                EventType<?> type = eventTypeRegistrar.findEventType(rs.getString(2));
+                if (Objects.isNull(type)) {
+                    log.error("Unrecognized Event Type: {}.", rs.getString(2));
+                    continue;
+                }
+
+                EventContent eventContent = mapper.readValue(rs.getString(3), type.getContentType());
+
+                tempList.add(new Event(rs.getLong(1), type, eventContent));
+            }
+            rs.close();
+            return tempList;
+        } catch (Exception e) {
+            log.error("", e);
+        }
+
+        return Collections.emptyList();
+    }
+
     private void createTable() {
         try (
                 Connection conn = dataSource.getConnection();
@@ -117,16 +165,16 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
 
     }
 
-    public String getSql() {
+    public String getSql(int count) {
 
         final String result;
-        String db = EventUtil.databaseName(this.dataSource);
+        String db = databaseName();
         switch (db) {
             case "MySQL":
-                result = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second limit " + Constants.MAX_QUEUE_COUNT + " for update";
+                result = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second limit " + count + " for update";
                 break;
             case "H2":
-                result = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<DATEADD(second, -10, current_timestamp()) limit " + Constants.MAX_QUEUE_COUNT + " for update";
+                result = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<DATEADD(second, -10, current_timestamp()) limit " + count + " for update";
                 break;
             default:
                 throw new RuntimeException("Unsupported Database.");
@@ -134,4 +182,28 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
         return result;
     }
 
+
+    private String databaseName;
+
+    private String databaseName() {
+        if (!Objects.isNull(databaseName)) {
+            return databaseName;
+        }
+
+        synchronized (this) {
+            while (Objects.isNull(databaseName)) {
+                try (Connection con = this.dataSource.getConnection()) {
+                    databaseName = con.getMetaData().getDatabaseProductName();
+                } catch (Exception e) {
+                    log.error("", e);
+                    try {
+                        Thread.sleep(10 * 1000L);
+                    } catch (InterruptedException e1) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+        return databaseName;
+    }
 }
