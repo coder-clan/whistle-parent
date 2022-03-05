@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.coderclan.whistle.api.EventConsumer;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
+import org.coderclan.whistle.api.EventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -28,6 +29,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import javax.sql.DataSource;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -147,8 +149,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    EventTypeRegistrar eventTypeRegistrar() {
-        return new EventTypeRegistrar();
+    EventTypeRegistrar eventTypeRegistrar(@Autowired(required = false) List<Collection<? extends EventType<?>>> publishingEventType) {
+        return new EventTypeRegistrar(publishingEventType);
     }
 
     @Bean
