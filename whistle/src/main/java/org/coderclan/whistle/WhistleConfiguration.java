@@ -48,7 +48,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     private List<EventConsumer> consumers;
 
     @Autowired(required = false)
-    private EventPersistenter persistenter;
+    private DatabaseEventPersistenter persistenter;
 
     @Resource
     private String whistleSystemName;
@@ -124,16 +124,16 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Bean
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public EventPersistenter eventPersistenter() {
-        return new EventPersistenter();
+    public DatabaseEventPersistenter eventPersistenter() {
+        return new DatabaseEventPersistenter();
     }
 
     @Bean
-    @ConditionalOnBean({DataSource.class, EventPersistenter.class})
+    @ConditionalOnBean({DataSource.class, DatabaseEventPersistenter.class})
     @ConditionalOnMissingBean
-    public FailedEventRetrier failedEventRetrier(DataSource ds, EventPersistenter persistenter,
-                                                 ObjectMapper objectMapper, EventTypeRegistrar typeRegistrar) {
-        return new FailedEventRetrier(ds, persistenter, objectMapper, typeRegistrar);
+    public DatabaseFailedEventRetrier failedEventRetrier(DataSource ds, DatabaseEventPersistenter persistenter,
+                                                         ObjectMapper objectMapper, EventTypeRegistrar typeRegistrar) {
+        return new DatabaseFailedEventRetrier(ds, persistenter, objectMapper, typeRegistrar);
     }
 
     @Bean

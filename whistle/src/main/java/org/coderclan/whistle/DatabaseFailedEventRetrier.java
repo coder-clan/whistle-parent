@@ -21,17 +21,17 @@ import java.util.Objects;
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
-public class FailedEventRetrier implements Runnable, ApplicationListener<ApplicationReadyEvent> {
-    private static final Logger log = LoggerFactory.getLogger(FailedEventRetrier.class);
+public class DatabaseFailedEventRetrier implements Runnable, ApplicationListener<ApplicationReadyEvent> {
+    private static final Logger log = LoggerFactory.getLogger(DatabaseFailedEventRetrier.class);
 
     private final DataSource ds;
-    private final EventPersistenter persistenter;
+    private final DatabaseEventPersistenter persistenter;
     private final ObjectMapper objectMapper;
 
     private EventTypeRegistrar eventTypeRegistrar;
 
 
-    public FailedEventRetrier(@Autowired(required = false) DataSource ds, EventPersistenter persistenter, ObjectMapper objectMapper, EventTypeRegistrar eventTypeRegistrar) {
+    public DatabaseFailedEventRetrier(@Autowired(required = false) DataSource ds, DatabaseEventPersistenter persistenter, ObjectMapper objectMapper, EventTypeRegistrar eventTypeRegistrar) {
         this.ds = ds;
         this.persistenter = persistenter;
         this.objectMapper = objectMapper;
