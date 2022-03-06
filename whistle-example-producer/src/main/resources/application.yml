@@ -1,3 +1,17 @@
+org:
+  coderclan:
+    whistle:
+      # Event Queue Size, too small  will cause high latency of delivering,
+      # since event faild to put into the queue will not be delivered until the next round of retry.
+      #
+      # Default value:  128
+      eventQueueSize: 32
+      table:
+        # Database Table name for persisting events
+        #
+        # Default value: sys_event_out
+        producedEvent: sys_persistent_event
+
 logging:
   level:
     org.coderclan: trace
