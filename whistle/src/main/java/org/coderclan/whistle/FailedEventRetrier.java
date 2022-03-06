@@ -21,11 +21,13 @@ import java.util.concurrent.TimeUnit;
 public class FailedEventRetrier implements ApplicationListener<ApplicationStartedEvent> {
     private static final Logger log = LoggerFactory.getLogger(FailedEventRetrier.class);
 
-    private EventPersistenter eventPersistenter;
+    private final EventPersistenter eventPersistenter;
     private ScheduledExecutorService scheduler;
+    private final EventQueue eventQueue;
 
-    public FailedEventRetrier(@Autowired(required = false) EventPersistenter eventPersistenter) {
+    public FailedEventRetrier(@Autowired(required = false) EventPersistenter eventPersistenter, @Autowired EventQueue eventQueue) {
         this.eventPersistenter = eventPersistenter;
+        this.eventQueue = eventQueue;
     }
 
     @Override
@@ -53,12 +55,12 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
         }
 
         private <C extends EventContent> void putEventToQueue(Event<C> event) {
-            if (Constants.queue.contains(event)) {
+            if (eventQueue.contains(event)) {
                 log.info("Event (persistentEventId={}) is already in the Sending Queue.", event.getPersistentEventId());
                 return;
             }
 
-            boolean success = Constants.queue.offer(event);
+            boolean success = eventQueue.offer(event);
             if (success) {
                 log.info("Requeued persistence event, eventId={} ", event.getPersistentEventId());
             } else {

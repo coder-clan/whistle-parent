@@ -7,6 +7,7 @@ import org.coderclan.whistle.api.EventType;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.GenericBeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -100,8 +101,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Bean
     @ConditionalOnBean({EventPersistenter.class})
     @ConditionalOnMissingBean
-    public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter) {
-        return new FailedEventRetrier(persistenter);
+    public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter, @Autowired EventQueue eventQueue) {
+        return new FailedEventRetrier(persistenter, eventQueue);
     }
 
     @Bean
@@ -112,8 +113,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public TransactionEventHandler transactionEventHandler() {
-        return new TransactionEventHandler();
+    public TransactionEventHandler transactionEventHandler(@Autowired EventQueue eventQueue) {
+        return new TransactionEventHandler(eventQueue);
     }
 
     @Bean
@@ -134,11 +135,17 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @Bean
-    public Supplier<Message<EventContent>> cloudStreamSupplier() {
+    @ConditionalOnMissingBean
+    EventQueue eventQueue(@Value("${org.coderclan.whistle.eventQueueSize:128}") int eventQueueSize) {
+        return new EventQueueImpl(eventQueueSize);
+    }
+
+    @Bean
+    public Supplier<Message<EventContent>> cloudStreamSupplier(@Autowired EventQueue eventQueue) {
         return () -> {
             while (true) {
                 try {
-                    Event<? extends EventContent> event = Constants.queue.take();
+                    Event<? extends EventContent> event = eventQueue.take();
 
                     return MessageBuilder.<EventContent>withPayload(event.getContent())
                             .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())

@@ -22,6 +22,11 @@ public class TransactionEventHandler {
     private static final Logger logger = LoggerFactory.getLogger(TransactionEventHandler.class);
     private static final ThreadLocal<Queue<Event<?>>> message = new ThreadLocal<>();
 
+    private final EventQueue eventQueue;
+
+    public TransactionEventHandler(EventQueue eventQueue) {
+        this.eventQueue = eventQueue;
+    }
 
     /**
      * Add an event to this handler.
@@ -96,7 +101,7 @@ public class TransactionEventHandler {
             }
             try {
                 for (Event<?> event : q) {
-                    boolean ret = Constants.queue.offer(event);
+                    boolean ret = eventQueue.offer(event);
                     if (!ret) {
                         logger.warn("Put event to sending queue failed. persistentEventId: {}", event.getPersistentEventId());
                     }

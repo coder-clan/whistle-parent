@@ -22,6 +22,8 @@ public class EventServiceImpl implements EventService {
     private EventPersistenter eventPersistenter;
     @Autowired
     private TransactionEventHandler transactionEventHandler;
+    @Autowired
+    private EventQueue eventQueue;
 
     @Override
     public <C extends EventContent> void publishEvent(EventType<C> type, C content) {
@@ -36,7 +38,7 @@ public class EventServiceImpl implements EventService {
     }
 
     private <C extends EventContent> void putEventToQueue(long persistentEventId, EventType<C> type, C content) {
-        boolean success = Constants.queue.offer(new Event<C>(persistentEventId, type, content));
+        boolean success = eventQueue.offer(new Event<C>(persistentEventId, type, content));
         if (!success) {
             log.warn("Put event to queue failed.");
         }
