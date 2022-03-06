@@ -144,6 +144,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
     }
 
     private void createTable() {
+        log.info("Persistent Event table name: {}", this.tableName);
         try (
                 Connection conn = dataSource.getConnection();
                 Statement statement = conn.createStatement()

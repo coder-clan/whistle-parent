@@ -4,6 +4,8 @@ import org.coderclan.whistle.api.EventConsumer;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
 import org.coderclan.whistle.api.EventType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +39,7 @@ import java.util.function.Supplier;
 @PropertySource(value = "classpath:org/coderclan/whistle/spring-cloud-stream.properties", encoding = "UTF-8")
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 public class WhistleConfiguration implements ApplicationContextAware {
+    private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
 
     @Autowired(required = false)
     private List<EventConsumer> consumers;
@@ -137,6 +140,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Bean
     @ConditionalOnMissingBean
     EventQueue eventQueue(@Value("${org.coderclan.whistle.eventQueueSize:128}") int eventQueueSize) {
+        log.info("Size of Event Queue: {}.", eventQueueSize);
         return new EventQueueImpl(eventQueueSize);
     }
 
