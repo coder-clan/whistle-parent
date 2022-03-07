@@ -21,7 +21,7 @@ public class EventServiceImpl implements EventService {
     @Autowired(required = false)
     private EventPersistenter eventPersistenter;
     @Autowired
-    private TransactionEventHandler transactionEventHandler;
+    private TransactionalEventHandler transactionalEventHandler;
     @Autowired
     private EventQueue eventQueue;
 
@@ -31,7 +31,7 @@ public class EventServiceImpl implements EventService {
 
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             long persistentEventId = eventPersistenter.persistEvent(type, content);
-            transactionEventHandler.addEvent(new Event<>(persistentEventId, type, content));
+            transactionalEventHandler.addEvent(new Event<>(persistentEventId, type, content));
         } else {
             this.putEventToQueue(-1, type, content);
         }

@@ -18,13 +18,13 @@ import java.util.Queue;
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
 @ThreadSafe
-public class TransactionEventHandler {
-    private static final Logger logger = LoggerFactory.getLogger(TransactionEventHandler.class);
+public class TransactionalEventHandler {
+    private static final Logger logger = LoggerFactory.getLogger(TransactionalEventHandler.class);
     private static final ThreadLocal<Queue<Event<?>>> message = new ThreadLocal<>();
 
     private final EventQueue eventQueue;
 
-    public TransactionEventHandler(EventQueue eventQueue) {
+    public TransactionalEventHandler(EventQueue eventQueue) {
         this.eventQueue = eventQueue;
     }
 

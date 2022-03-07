@@ -1,24 +1,34 @@
 org:
   coderclan:
     whistle:
-      # Event Queue Size, too small  will cause high latency of delivering,
-      # since event faild to put into the queue will not be delivered until the next round of retry.
+      # Application Name must be global unique in all services. Service instances with the same application name will be treated as the same service.
+      # For consumers, only one service instance will be chosen from all service instances with the same application name, and delivery the event to the chosen one.
+      #
+      # Default value: ${spring.application.name}
+      applicationName: ${spring.application.name}
+
+      # Event Queue Size, too small will cause high latency of delivering,
+      # since event failed to put into the queue will not be delivered until the next round of retry.
       #
       # Default value:  128
       eventQueueSize: 32
+
+      # Delay time of Re-deliver un-confirmed persisted events. Unit: Second.
+      #
+      # default value: 10
+      retryDelay: 3
+
       table:
         # Database Table name for persisting events
         #
         # Default value: sys_event_out
         producedEvent: sys_persistent_event
 
-logging:
-  level:
-    org.coderclan: trace
-
-server:
-  port: 0
 spring:
+  rabbitmq:
+    host: localhost
+    port: 5672
+
   h2:
     console:
       enabled: true
@@ -30,3 +40,10 @@ spring:
     driverClassName: org.h2.Driver
   application:
     name: whistle-example-producer
+
+logging:
+  level:
+    org.coderclan: trace
+
+server:
+  port: 0

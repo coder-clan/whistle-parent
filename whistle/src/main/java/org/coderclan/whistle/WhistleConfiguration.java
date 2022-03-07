@@ -25,7 +25,6 @@ import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 
 import javax.annotation.PostConstruct;
-import javax.annotation.Resource;
 import javax.sql.DataSource;
 import java.util.Collection;
 import java.util.List;
@@ -44,8 +43,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Autowired(required = false)
     private List<EventConsumer> consumers;
 
-    @Resource
-    private String whistleSystemName;
+    @Value("${org.coderclan.whistle.applicationName:${spring.application.name}}")
+    private String applicationName;
 
     private ApplicationContext applicationContext;
 
@@ -56,7 +55,15 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @PostConstruct
     public void init() {
+        checkApplicationName();
         registerEventConsumers();
+    }
+
+    private void checkApplicationName() {
+        if (Objects.isNull(this.applicationName) || this.applicationName.isEmpty()) {
+            throw new IllegalStateException("The Application Name must be set.");
+        }
+        log.info("Whistle Application Name: {}.", this.applicationName);
     }
 
     private void registerEventConsumers() {
@@ -76,7 +83,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         }
 
         System.setProperty("spring.cloud.function.definition", beanNames.deleteCharAt(0).toString());
-        System.setProperty("spring.cloud.stream.default.group", this.whistleSystemName);
+        System.setProperty("spring.cloud.stream.default.group", this.applicationName);
     }
 
     private void registerConsumer(EventConsumer c, String beanName) {
@@ -116,8 +123,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public TransactionEventHandler transactionEventHandler(@Autowired EventQueue eventQueue) {
-        return new TransactionEventHandler(eventQueue);
+    public TransactionalEventHandler transactionEventHandler(@Autowired EventQueue eventQueue) {
+        return new TransactionalEventHandler(eventQueue);
     }
 
     @Bean

@@ -4,6 +4,7 @@ import org.coderclan.whistle.api.EventContent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.ApplicationListener;
 
@@ -21,6 +22,9 @@ import java.util.concurrent.TimeUnit;
 public class FailedEventRetrier implements ApplicationListener<ApplicationStartedEvent> {
     private static final Logger log = LoggerFactory.getLogger(FailedEventRetrier.class);
 
+    @Value("${org.coderclan.whistle.retryDelay:10}")
+    private int retryDelay;
+
     private final EventPersistenter eventPersistenter;
     private ScheduledExecutorService scheduler;
     private final EventQueue eventQueue;
@@ -35,9 +39,12 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
         if (Objects.isNull(eventPersistenter)) {
             return;
         }
+
+        log.info("Delay for retrying to deliver un-confirmed event is: {}s", retryDelay);
+
         this.scheduler = Executors.newScheduledThreadPool(1);
         EventRetrierRunnable runnable = new EventRetrierRunnable();
-        this.scheduler.scheduleWithFixedDelay(runnable, 0, 10, TimeUnit.SECONDS);
+        this.scheduler.scheduleWithFixedDelay(runnable, 0, retryDelay, TimeUnit.SECONDS);
     }
 
     private class EventRetrierRunnable implements Runnable {

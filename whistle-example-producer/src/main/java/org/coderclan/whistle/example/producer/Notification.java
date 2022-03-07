@@ -16,28 +16,6 @@ public class Notification {
     @Autowired
     private EventService eventService;
 
-
-//    @PostConstruct
-//    public void init() {
-//        Notification n = this;
-//        Thread t = new Thread(new Runnable() {
-//
-//            @Override
-//            public void run() {
-//                while (true) {
-//                    n.sendNotification();
-//                    try {
-//                        Thread.sleep(10 * 1000);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                }
-//            }
-//        });
-//        t.setDaemon(true);
-//        t.start();
-//    }
-
     // @Scheduled(cron = "*/10 * * * * *")
     @Transactional(rollbackFor = Exception.class)
     public void sendNotification() {
