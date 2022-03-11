@@ -1,7 +1,5 @@
 package org.coderclan.whistle;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import net.jcip.annotations.ThreadSafe;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventType;
@@ -31,7 +29,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
     private DataSource dataSource;
 
     @Autowired
-    private ObjectMapper mapper;
+    private EventContentSerializer serializer;
 
     @Autowired
     private EventTypeRegistrar eventTypeRegistrar;
@@ -52,12 +50,8 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
      */
     @Override
     public <C extends EventContent> long persistEvent(EventType<C> type, C content) {
-        String json;
-        try {
-            json = this.mapper.writeValueAsString(content);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+
+        String json = this.serializer.toJson(content);
 
         long eventDbId;
         // persistent event to database;
@@ -130,7 +124,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
                     continue;
                 }
 
-                EventContent eventContent = mapper.readValue(rs.getString(3), type.getContentType());
+                EventContent eventContent = serializer.toEventContent(rs.getString(3), type.getContentType());
 
                 tempList.add(new Event(rs.getLong(1), type, eventContent));
             }
