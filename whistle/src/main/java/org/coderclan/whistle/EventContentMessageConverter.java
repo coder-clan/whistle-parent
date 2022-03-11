@@ -26,7 +26,7 @@ public class EventContentMessageConverter implements MessageConverter {
     @Autowired
     private CompositeMessageConverter messageConverter;
     /**
-     * A message converter which support application/json.     *
+     * A message converter which support application/json.
      * JSON Serializing and Deserializing will be delegated to this converter.
      */
     private AbstractMessageConverter jsonMessageConverter;

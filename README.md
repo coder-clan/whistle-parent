@@ -134,10 +134,10 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
 
 ## Configuration
 
-The Whistle use Spring Cloud Stream, so all the configuration of Spring Cloud Stream could be adjusted. Please refer to
+The Whistle uses Spring Cloud Stream, so all the configuration of Spring Cloud Stream could be adjusted. Please refer to
 <a href="https://docs.spring.io/spring-cloud-stream/docs/current/reference/html/">Spring Cloud Stream Documentation</a>
 for more. The Whistle changed some of these configuration Items, please check <code>
 org.coderclan.whistle.spring-cloud-stream.properties</code>.
 
-The Whistle introduce some configuration items to change behaviors, <code>org.coderclan.whistle.*</code>, please check
+The Whistle introduces some configuration items to change its behavior, <code>org.coderclan.whistle.*</code>, please check
 the application.yml in the module whistle-example-producer for details.
