@@ -1,5 +1,6 @@
 package org.coderclan.whistle;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.coderclan.whistle.api.EventConsumer;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
@@ -23,6 +24,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
@@ -30,6 +33,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
@@ -41,7 +45,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
 
     @Autowired(required = false)
-    private List<EventConsumer> consumers;
+    private List<EventConsumer<?>> consumers;
 
     @Value("${org.coderclan.whistle.applicationName:${spring.application.name}}")
     private String applicationName;
@@ -73,7 +77,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         StringBuilder beanNames = new StringBuilder();
 
         int i = 0;
-        for (EventConsumer c : this.consumers) {
+        for (EventConsumer<?> c : this.consumers) {
             i++;
 
             String beanName = "whistleConsumer" + i;
@@ -86,7 +90,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         System.setProperty("spring.cloud.stream.default.group", this.applicationName);
     }
 
-    private void registerConsumer(EventConsumer c, String beanName) {
+    private void registerConsumer(EventConsumer<?> c, String beanName) {
         //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
         System.setProperty("spring.cloud.stream.function.bindings." + beanName + "-in-0", c.getSupportEventType().getName());
 
@@ -152,21 +156,29 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @Bean
-    public Supplier<Message<EventContent>> cloudStreamSupplier(@Autowired EventQueue eventQueue) {
-        return () -> {
-            while (true) {
-                try {
-                    Event<? extends EventContent> event = eventQueue.take();
+    @ConditionalOnMissingBean
+    EventContentSerializer eventContentSerializer(@Autowired ObjectMapper objectMapper) {
+        return new JacksonEventContentSerializer(objectMapper);
+    }
 
-                    return MessageBuilder.<EventContent>withPayload(event.getContent())
-                            .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())
-                            .setHeader(Constants.EVENT_PERSISTENT_ID_HEADER, event.getPersistentEventId())
-                            .build();
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                }
-            }
+    @Bean
+    public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventQueue eventQueue) {
+        return () ->
+                Flux.fromStream(Stream.generate(() -> {
+                    try {
 
-        };
+                        Event<? extends EventContent> event = eventQueue.take();
+
+                        return MessageBuilder.<EventContent>withPayload(event.getContent())
+                                .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())
+                                .setHeader(Constants.EVENT_PERSISTENT_ID_HEADER, event.getPersistentEventId())
+                                .build();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return null;
+                })).subscribeOn(Schedulers.boundedElastic()).share();
+
+
     }
 }
