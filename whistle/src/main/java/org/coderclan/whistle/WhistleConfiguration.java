@@ -95,7 +95,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         System.setProperty("spring.cloud.stream.function.bindings." + beanName + "-in-0", c.getSupportEventType().getName());
 
         GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
-        beanDefinition.setBeanClass(ConsumerWrapper.class);
+        beanDefinition.setBeanClass(ConsumerReactiveWrapper.class);
 
         MutablePropertyValues mpv = new MutablePropertyValues();
         beanDefinition.setPropertyValues(mpv);

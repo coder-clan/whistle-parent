@@ -1,7 +1,7 @@
 logging:
   level:
     org:
-      coderclan: debug
+      coderclan: trace
 server:
   port: 0
 spring:
@@ -14,7 +14,7 @@ spring:
     stream:
       default:
         consumer:
-          concurrency: 3
+          concurrency: 1
   datasource:
     url: jdbc:h2:mem:whistle-example-consumer
     username: sa

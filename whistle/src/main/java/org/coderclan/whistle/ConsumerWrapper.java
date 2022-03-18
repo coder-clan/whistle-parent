@@ -22,9 +22,15 @@ public class ConsumerWrapper implements Consumer<EventContent> {
 
     @Override
     public void accept(EventContent content) {
+        consume(eventConsumer, content);
+    }
+
+    static void consume(EventConsumer<EventContent> eventConsumer, EventContent content) {
         try {
-            log.trace("Received event: type={}, content={}", this.eventConsumer.getSupportEventType(), content);
-            eventConsumer.consume(content);
+            log.trace("Received event: type={}, content={}", eventConsumer.getSupportEventType(), content);
+            if (!eventConsumer.consume(content)) {
+                throw new ConsumerException("Consume failed.");
+            }
         } catch (Exception e) {
             throw new ConsumerException(e);
         }
