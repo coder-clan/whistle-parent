@@ -23,7 +23,7 @@ import java.util.Objects;
  * Created by aray(dot)chou(dot)cn(at)gmail(dot)com on 1/18/2018.
  */
 @ThreadSafe
-public class DatabaseEventPersistenter implements ApplicationListener<ContextRefreshedEvent>, EventPersistenter {
+public class DatabaseEventPersistenter implements ApplicationListener<ContextRefreshedEvent>, EventPersistenter<Long> {
     private static final Logger log = LoggerFactory.getLogger(DatabaseEventPersistenter.class);
     @Autowired
     private DataSource dataSource;
@@ -49,7 +49,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
      * @return Database Event ID (Primary Key of SYS_UNSENT_EVENT)
      */
     @Override
-    public <C extends EventContent> long persistEvent(EventType<C> type, C content) {
+    public <C extends EventContent> Long persistEvent(EventType<C> type, C content) {
 
         String json = this.serializer.toJson(content);
 
@@ -78,7 +78,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void confirmEvent(long... persistentEventId) {
+    public void confirmEvent(Long... persistentEventId) {
         String sql = "update " + tableName + " set success=true where id=?";
         try (
                 Connection conn = dataSource.getConnection();
@@ -103,12 +103,12 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public List<Event<?>> retrieveUnconfirmedEvent(int count) {
+    public List<Event<Long, ?>> retrieveUnconfirmedEvent(int count) {
         try (
                 Connection conn = dataSource.getConnection();
                 Statement statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)
         ) {
-            ArrayList<Event<?>> tempList = new ArrayList<>();
+            ArrayList<Event<Long, ?>> tempList = new ArrayList<>();
 
             // set auto commit to false to lock row in database to prevent other thread to requeue.
             conn.setAutoCommit(false);

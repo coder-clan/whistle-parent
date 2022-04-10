@@ -167,7 +167,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
                 Flux.fromStream(Stream.generate(() -> {
                     try {
 
-                        Event<? extends EventContent> event = eventQueue.take();
+                        Event<?,? extends EventContent> event = eventQueue.take();
 
                         return MessageBuilder.<EventContent>withPayload(event.getContent())
                                 .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())

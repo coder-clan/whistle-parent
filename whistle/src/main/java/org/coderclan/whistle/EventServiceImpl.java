@@ -30,7 +30,7 @@ public class EventServiceImpl implements EventService {
         log.debug("Try to send event: eventType={}, content={}", type, content);
 
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            long persistentEventId = eventPersistenter.persistEvent(type, content);
+            Object persistentEventId = eventPersistenter.persistEvent(type, content);
             transactionalEventHandler.addEvent(new Event<>(persistentEventId, type, content));
         } else {
             this.putEventToQueue(-1, type, content);
@@ -38,7 +38,7 @@ public class EventServiceImpl implements EventService {
     }
 
     private <C extends EventContent> void putEventToQueue(long persistentEventId, EventType<C> type, C content) {
-        boolean success = eventQueue.offer(new Event<C>(persistentEventId, type, content));
+        boolean success = eventQueue.offer(new Event<Object, C>(persistentEventId, type, content));
         if (!success) {
             log.warn("Put event to queue failed.");
         }

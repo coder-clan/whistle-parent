@@ -20,7 +20,7 @@ import java.util.Queue;
 @ThreadSafe
 public class TransactionalEventHandler {
     private static final Logger logger = LoggerFactory.getLogger(TransactionalEventHandler.class);
-    private static final ThreadLocal<Queue<Event<?>>> message = new ThreadLocal<>();
+    private static final ThreadLocal<Queue<Event<?, ?>>> message = new ThreadLocal<>();
 
     private final EventQueue eventQueue;
 
@@ -33,7 +33,7 @@ public class TransactionalEventHandler {
      *
      * @param event
      */
-    public void addEvent(Event<?> event) {
+    public void addEvent(Event<?, ?> event) {
         if (Objects.isNull(message.get())) {
             // first time calling this method
 
@@ -85,7 +85,7 @@ public class TransactionalEventHandler {
             try {
                 // put events into the Sending Queue
                 if (STATUS_COMMITTED == status) {
-                    Queue<Event<?>> q = message.get();
+                    Queue<Event<?, ?>> q = message.get();
                     enqueueEvent(q);
                 }
             } finally {
@@ -95,12 +95,12 @@ public class TransactionalEventHandler {
             }
         }
 
-        private void enqueueEvent(Queue<Event<?>> q) {
+        private void enqueueEvent(Queue<Event<?, ?>> q) {
             if (q == null || q.isEmpty()) {
                 return;
             }
             try {
-                for (Event<?> event : q) {
+                for (Event<?, ?> event : q) {
                     boolean ret = eventQueue.offer(event);
                     if (!ret) {
                         logger.warn("Put event to sending queue failed. persistentEventId: {}", event.getPersistentEventId());

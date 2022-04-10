@@ -50,18 +50,18 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
     private class EventRetrierRunnable implements Runnable {
         @Override
         public void run() {
-            List<Event<?>> events;
+            List<Event<?,?>> events;
             do {
                 events = eventPersistenter.retrieveUnconfirmedEvent(Constants.MAX_QUEUE_COUNT);
                 if (Objects.isNull(events))
                     return;
-                for (Event<?> e : events) {
+                for (Event<?,?> e : events) {
                     this.putEventToQueue(e);
                 }
             } while (events.size() == Constants.MAX_QUEUE_COUNT);
         }
 
-        private <C extends EventContent> void putEventToQueue(Event<C> event) {
+        private <C extends EventContent> void putEventToQueue(Event<?,C> event) {
             if (eventQueue.contains(event)) {
                 log.info("Event (persistentEventId={}) is already in the Sending Queue.", event.getPersistentEventId());
                 return;
