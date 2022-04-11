@@ -105,7 +105,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
 
-    @Bean
+    @Bean("eventPersistenter")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
     public DatabaseEventPersistenter eventPersistenter() {
@@ -167,7 +167,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
                 Flux.fromStream(Stream.generate(() -> {
                     try {
 
-                        Event<?,? extends EventContent> event = eventQueue.take();
+                        Event<? extends EventContent> event = eventQueue.take();
 
                         return MessageBuilder.<EventContent>withPayload(event.getContent())
                                 .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())
@@ -178,7 +178,5 @@ public class WhistleConfiguration implements ApplicationContextAware {
                     }
                     return null;
                 })).subscribeOn(Schedulers.boundedElastic()).share();
-
-
     }
 }

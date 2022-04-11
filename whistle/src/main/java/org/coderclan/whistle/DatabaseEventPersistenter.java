@@ -23,7 +23,7 @@ import java.util.Objects;
  * Created by aray(dot)chou(dot)cn(at)gmail(dot)com on 1/18/2018.
  */
 @ThreadSafe
-public class DatabaseEventPersistenter implements ApplicationListener<ContextRefreshedEvent>, EventPersistenter<Long> {
+public class DatabaseEventPersistenter implements ApplicationListener<ContextRefreshedEvent>, EventPersistenter {
     private static final Logger log = LoggerFactory.getLogger(DatabaseEventPersistenter.class);
     @Autowired
     private DataSource dataSource;
@@ -49,11 +49,11 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
      * @return Database Event ID (Primary Key of SYS_UNSENT_EVENT)
      */
     @Override
-    public <C extends EventContent> Long persistEvent(EventType<C> type, C content) {
+    public <C extends EventContent> String persistEvent(EventType<C> type, C content) {
 
         String json = this.serializer.toJson(content);
 
-        long eventDbId;
+        String eventDbId;
         // persistent event to database;
         String sql = "insert into " + tableName + " (event_type,event_content)values(?,?)";
 
@@ -67,7 +67,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
             ps.executeUpdate();
             ResultSet rs = ps.getGeneratedKeys();
             rs.next();
-            eventDbId = rs.getLong(1);
+            eventDbId = rs.getString(1);
             log.info("Event persist to database, id={},type={},eventContent={}", eventDbId, type, json);
         } catch (Exception e) {
             log.error("Event persist to database failed, type={},eventContent={}", type, json);
@@ -78,17 +78,16 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void confirmEvent(Long... persistentEventId) {
+    public void confirmEvent(String persistentEventId) {
         String sql = "update " + tableName + " set success=true where id=?";
         try (
                 Connection conn = dataSource.getConnection();
                 PreparedStatement statement = conn.prepareStatement(sql);
         ) {
-            for (long id : persistentEventId) {
-                statement.setLong(1, id);
-                statement.addBatch();
-                log.debug("Confirm event: persistentEventId={}", persistentEventId);
-            }
+            statement.setString(1, persistentEventId);
+            statement.addBatch();
+            log.debug("Confirm event: persistentEventId={}", persistentEventId);
+
             statement.executeBatch();
         } catch (SQLException e) {
             log.error("Failed to update ", e);
@@ -103,12 +102,12 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public List<Event<Long, ?>> retrieveUnconfirmedEvent(int count) {
+    public List<Event<?>> retrieveUnconfirmedEvent(int count) {
         try (
                 Connection conn = dataSource.getConnection();
                 Statement statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)
         ) {
-            ArrayList<Event<Long, ?>> tempList = new ArrayList<>();
+            ArrayList<Event<?>> tempList = new ArrayList<>();
 
             // set auto commit to false to lock row in database to prevent other thread to requeue.
             conn.setAutoCommit(false);
@@ -126,7 +125,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
 
                 EventContent eventContent = serializer.toEventContent(rs.getString(3), type.getContentType());
 
-                tempList.add(new Event(rs.getLong(1), type, eventContent));
+                tempList.add(new Event(rs.getString(1), type, eventContent));
             }
             rs.close();
             return tempList;

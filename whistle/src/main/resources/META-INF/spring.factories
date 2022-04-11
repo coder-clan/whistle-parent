@@ -1,2 +1,3 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-org.coderclan.whistle.WhistleConfiguration
+org.coderclan.whistle.WhistleConfiguration, \
+org.coderclan.whistle.WhistleMongodbConfiguration

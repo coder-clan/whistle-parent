@@ -7,6 +7,9 @@ import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.support.ErrorMessage;
 
+import javax.annotation.PostConstruct;
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.util.Objects;
 
 /**
@@ -24,13 +27,13 @@ public class ServiceActivators {
      * @param recordMetadata RecordMetadata Header for Kafka
      */
     @ServiceActivator(inputChannel = "coderclan-whistle-ack-channel")
-    public void acks(@Header(Constants.EVENT_PERSISTENT_ID_HEADER) Long persistentId,
+    public void acks(@Header(Constants.EVENT_PERSISTENT_ID_HEADER) String persistentId,
                      @Header(value = "amqp_publishConfirm", required = false) Boolean confirmed,
                      @Header(value = "kafka_recordMetadata", required = false) Object recordMetadata
     ) {
         boolean success = Objects.equals(confirmed, Boolean.TRUE) || !(Objects.isNull(recordMetadata));
         log.trace("Confirm received. persistentId={}, confirmed={}", persistentId, success);
-        if (persistentId != -1L && success && !Objects.isNull(this.persistenter)) {
+        if (Objects.nonNull(persistentId) && success && !Objects.isNull(this.persistenter)) {
             this.persistenter.confirmEvent(persistentId);
         }
     }

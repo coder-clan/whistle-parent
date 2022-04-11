@@ -10,18 +10,18 @@ import java.util.Objects;
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
 @Immutable
-public class Event<ID,C extends EventContent> {
-    private final ID persistentEventId;
+public class Event<C extends EventContent> {
+    private final String persistentEventId;
     private final EventType<C> type;
     private final C content;
 
-    public Event(ID persistentEventId, EventType<C> type, C content) {
+    public Event(String persistentEventId, EventType<C> type, C content) {
         this.persistentEventId = persistentEventId;
         this.type = type;
         this.content = content;
     }
 
-    public ID getPersistentEventId() {
+    public String getPersistentEventId() {
         return persistentEventId;
     }
 
@@ -37,7 +37,7 @@ public class Event<ID,C extends EventContent> {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Event<?,?> event = (Event<?,?>) o;
+        Event<?> event = (Event<?>) o;
         return Objects.equals(type, event.type) && Objects.equals(content, event.content);
     }
 
