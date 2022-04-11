@@ -1,0 +1,45 @@
+org:
+  coderclan:
+    whistle:
+      # Application Name must be global unique in all services. Service instances with the same application name will be treated as the same service.
+      # For consumers, only one service instance will be chosen from all service instances with the same application name, and delivery the event to the chosen one.
+      #
+      # Default value: ${spring.application.name}
+      applicationName: ${spring.application.name}
+
+      # Event Queue Size, too small will cause high latency of delivering,
+      # since event failed to put into the queue will not be delivered until the next round of retry.
+      #
+      # Default value:  128
+      eventQueueSize: 32
+
+      # Delay time of Re-deliver un-confirmed persisted events. Unit: Second.
+      #
+      # default value: 10
+      retryDelay: 3
+
+      table:
+        # Database Table name for persisting events
+        #
+        # Default value: sys_event_out
+        producedEvent: sys_persistent_event
+
+spring:
+  main:
+    allow-circular-references: true
+  rabbitmq:
+    host: localhost
+    port: 5672
+  application:
+    name: whistle-example-producer
+  data:
+    mongodb:
+      uri: "mongodb://whistle:simplepwd@172.25.240.101:27017,172.25.240.102:27017,172.25.240.103:27017/whistle"
+      auto-index-creation: true
+
+logging:
+  level:
+    org.coderclan: trace
+
+server:
+  port: 0

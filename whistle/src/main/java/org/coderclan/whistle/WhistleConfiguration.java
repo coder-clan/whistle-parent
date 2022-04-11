@@ -40,7 +40,7 @@ import java.util.stream.Stream;
  */
 @Configuration
 @PropertySource(value = "classpath:org/coderclan/whistle/spring-cloud-stream.properties", encoding = "UTF-8")
-@AutoConfigureAfter(DataSourceAutoConfiguration.class)
+@AutoConfigureAfter({DataSourceAutoConfiguration.class, WhistleMongodbConfiguration.class})
 public class WhistleConfiguration implements ApplicationContextAware {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
 
