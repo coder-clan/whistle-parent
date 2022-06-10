@@ -43,7 +43,7 @@ import java.util.stream.Stream;
 @AutoConfigureAfter({DataSourceAutoConfiguration.class, WhistleMongodbConfiguration.class})
 public class WhistleConfiguration implements ApplicationContextAware {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
-
+    private final static String cloudStreamSupplier = "cloudStreamSupplier";
     @Autowired(required = false)
     private List<EventConsumer<?>> consumers;
 
@@ -74,7 +74,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         if (Objects.isNull(consumers) || consumers.isEmpty())
             return;
 
-        StringBuilder beanNames = new StringBuilder();
+        StringBuilder beanNames = new StringBuilder(cloudStreamSupplier);
 
         int i = 0;
         for (EventConsumer<?> c : this.consumers) {
@@ -86,7 +86,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
             registerConsumer(c, beanName);
         }
 
-        System.setProperty("spring.cloud.function.definition", beanNames.deleteCharAt(0).toString());
+        System.setProperty("spring.cloud.function.definition", beanNames.toString());
         System.setProperty("spring.cloud.stream.default.group", this.applicationName);
     }
 
@@ -161,7 +161,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         return new JacksonEventContentSerializer(objectMapper);
     }
 
-    @Bean
+    @Bean(cloudStreamSupplier)
     public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventQueue eventQueue) {
         return () ->
                 Flux.fromStream(Stream.generate(() -> {
