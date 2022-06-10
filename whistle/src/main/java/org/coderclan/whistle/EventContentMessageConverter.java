@@ -13,6 +13,7 @@ import org.springframework.util.MimeType;
 
 import javax.annotation.PostConstruct;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -24,7 +25,7 @@ public class EventContentMessageConverter implements MessageConverter {
     private static final Logger log = LoggerFactory.getLogger(EventContentMessageConverter.class);
 
     @Autowired
-    private CompositeMessageConverter messageConverter;
+    private List<CompositeMessageConverter> messageConverters;
     /**
      * A message converter which support application/json.
      * JSON Serializing and Deserializing will be delegated to this converter.
@@ -36,16 +37,17 @@ public class EventContentMessageConverter implements MessageConverter {
 
         // find a Message converter which supports application/json from this.messageConverter
         MimeType json = new MimeType("application", "json");
-        for (MessageConverter c : messageConverter.getConverters()) {
-            if (c instanceof AbstractMessageConverter) {
-                AbstractMessageConverter s = (AbstractMessageConverter) c;
-                if (s.getSupportedMimeTypes().contains(json)) {
-                    this.jsonMessageConverter = s;
-                    return;
+        for (CompositeMessageConverter messageConverter : messageConverters) {
+            for (MessageConverter c : messageConverter.getConverters()) {
+                if (c instanceof AbstractMessageConverter) {
+                    AbstractMessageConverter s = (AbstractMessageConverter) c;
+                    if (s.getSupportedMimeTypes().contains(json)) {
+                        this.jsonMessageConverter = s;
+                        return;
+                    }
                 }
             }
         }
-
         throw new IllegalStateException("Json Message Converter not found!");
     }
 
