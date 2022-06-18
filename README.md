@@ -1,63 +1,67 @@
 # Whistle
 
 The Whistle is a Reliable Event Delivering and Consuming mechanism for the Java Spring Boot framework. It is named
-Whistle since Whistles should be an important tool to communicate in ancient times.
+Whistle since Whistles should be an important tool for communication in ancient times.
 
 EDA(Event Driving Architecture) is a good way to decouple the services in SOA(Service Oriented Architecture, or
-Micro-services). But there is a problem in EDA, which is Data Consistency. A service usually saves some data to a
-Database when doing business logic, and then publishes an Event to an MQ(Message Queue, e.g. RabbitMQ, Kafka, etc.). The
-Database and The MQ are two Data Sources, and data in the two Data Sources may be in an un-consistent state. For
-example, if the network connection between the service and the MQ is interrupted for some reason, the service can't know
-the data state in the MQ and don't know whether to commit or roll back the database transaction.
+Micro-services). But there is a problem in EDA, which is data consistency. A service usually saves some data to a
+Database when doing business logic, and then publishes an event to an MQ(Message Queue, e.g. RabbitMQ, Kafka, etc.). The
+Database and The MQ are two data sources, and data in the two data sources may be in an inconsistent state. For example,
+if the network connection between the service and the MQ is interrupted for some reason, the service can't know the data
+state in the MQ and doesn’t know whether to commit or roll back the database transaction.
 
-The Whistle use the following approach to solve the Data Consistency problem in Event Publishing:
+The Whistle uses the following approaches to solve the data consistency problem in event publishing:
 
 - Enable MQ's Publisher Confirm.
-- Persistent the Event to the database within the same Database Transaction with state unsuccessful.
-- After Database Transaction is committed, publish the event to MQ.
-- Change the state of the Persisted Event in the database to successful after receiving the Confirmation from MQ.
-- Periodically retry sending the unsuccessful Persisted Event to MQ.
+- Persistent the event to the database within the same database transaction with the state of unsuccessful.
+- After the database transaction is committed, publish the event to MQ.
+- Change the state of the Persisted Event in the database to successful after receiving the confirmation from MQ.
+- Periodically retry to send the unsuccessful persistent event to MQ.
 
-Using this approach, Events will never lose, but Events may delay, may be duplicated.
+Using this approach, events will never be lost, and there will be no phantom events (events sent to MQ, but database
+transactions are rolled back). However, events may be delayed or duplicated, or may be out of order.
 
-If there is no Database Transaction, the Whistle can also be used to handle events. but there is no Data Consistency
+If there is no database transaction, the Whistle can also be used to handle events. but there is no data consistency
 guarantee in this situation.
 
 ## Concepts
 
-The Whistle introduce four concepts: <code>EventType</code>, <code>EventContent</code>, <code>EventService</code>
+The Whistle introduces four concepts: <code>EventType</code>, <code>EventContent</code>, <code>EventService</code>
 and <code>EventConsumer</code>.
 
-<code>EventType</code> indicates the Type of Event, for example, we can define these EventTypes: OrderCreated, OrderPaid,
-OrderDelivered. To publish events of these types to tell other systems that: a new Order has been created, an Order has
-been paid, or an Order has been delivered properly.
+<code>EventType</code> indicates the Type of Event, for example, we can define these EventTypes: OrderCreated,
+OrderPaid, OrderDelivered. To publish events of these types to tell other systems that: a new order has been created, an
+order has been paid, or an order has been delivered properly.
 
-<code>EventContent</code> is a super Class that defines the data schema of event contents. An <code>EventType</code> refers to a subclass of
+<code>EventContent</code> is a super Class that defines the data schema of event contents. An EventType connects to a
+subclass of
 <code>EventContent</code>.
 
-We can call <code>EventService.publishEvent(EventType type, EventContent content)</code> to publish Event. Implement <code>EventConsumer</code> to
-consume a type of events.
+To publish an event, we can use <code>EventService.publishEvent(EventType type, EventContent content)</code>.
+
+To consume events, we can implement <code>EventConsumer</code>.
 
 ## Design
 
 The Whistle uses <a href="https://docs.spring.io/spring-cloud-stream/docs/current/reference/html/">Spring Cloud
 Stream</a> to handle event publishing and consuming.
 
-For publishing, the Spring Cloud Stream uses <code>
-org.coderclan.whistle.WhistleConfiguration.cloudStreamSupplier</code> to read events from a BlockingQueue and send them
-to MQ.
+For publishing, the Spring Cloud Stream uses <code>org.coderclan.whistle.WhistleConfiguration.cloudStreamSupplier</code>
+to read events from a BlockingQueue and send them to MQ.
 
-<code>EventService</code>, which is provided by the Whistle, its <code>publishEvent()</code> method will put the event into the BlockingQueue
-directly if there is no Database Transaction (@Transactional), or it will persist the event into the database and use
-<code>TransactionalEventHandler</code> to handle the event if Transaction is active. The <code>TransactionalEventHandler</code> will put the event
-into ThreadLocal, and register a callback (
-via <code>TransactionSynchronization</code>) to listen to the commit event of current Transaction. When the transaction commits, The
-callback will be fired, it will get events from the ThreadLocal and put it into the BlockingQueue.
+EventService, which is provided by the Whistle, its <code>publishEvent()</code> method will put the event into the
+BlockingQueue directly if there is no Database Transaction (@Transactional), or it will persist the event into the
+database and use <code>TransactionalEventHandler</code> to handle the event if Transaction is active. The TransactionalEventHandler
+will put the event into ThreadLocal, and register a callback (via TransactionSynchronization) to listen to the commit
+event of the current Transaction. When the transaction commits, the callback will be fired, it will get events from the
+ThreadLocal and put them into the BlockingQueue.
 
-<code>FailedEventRetrier</code> will periodically retrieve unconfirmed events from Database and re-put them into the BlockingQueue.
+<code>FailedEventRetrier</code> will periodically retrieve unconfirmed events from the database and re-put them into the
+BlockingQueue.
 
-For consuming, the Whistle will find all Spring Beans which are instances of <code>EventConsumer</code>, wraps them by
-<code>ConsumerWrapper</code>, and registers these ConsumerWrappers to Spring as Spring Beans. The Spring Cloud Stream will use these
+For consuming, the Whistle will look for all Spring Beans that are instances of <code>EventConsumer</code> and wrap
+them with <code>ConsumerWrapper</code>
+, and registers these ConsumerWrappers to Spring as Spring Beans. The Spring Cloud Stream will use these
 <code>ConsumerWrapper</code> Beans to consume events from MQ.
 
 ## How to use Whistle.
@@ -65,7 +69,7 @@ For consuming, the Whistle will find all Spring Beans which are instances of <co
 The module whistle-example-producer demonstrates how to use the Whistle as a producer to publish events. The module
 whistle-example-consumer is a demo for the consumer.
 
-Install the RabbitMQ on local machine with default configuration, and then whistle-example-producer and
+Install the RabbitMQ on a local machine with the default configuration, and then whistle-example-producer and
 whistle-example-consumer could be started as normal spring boot projects. (java -jar
 whistle-example-producer-1.0.0-SNAPSHOT.jar)
 
@@ -89,20 +93,21 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
         &lt;/dependency>
 </pre>
 
-- Implement <code>org.coderclan.whistle.api.EventType</code> and <code>org.coderclan.whistle.api.EventContent</code>.
-  Using Enumeration to define EventType is recommended.
-- The Whistle needs to know what EventTypes we be published. Expose the event types the system will publish As <code>
-  org.coderclan.whistle.example.producer.Config.eventTypes</code> do.
-- Inject <code>org.coderclan.whistle.api.EventService</code> into your Spring Beans and call it <code>
-  EventService.publishEvent()</code> to publish events. <code>org.coderclan.whistle.example.producer.Notification</code>
-  demonstrate how to use it.
+- Implement <code>org.coderclan.whistle.api.EventType</code> and <code>org.coderclan.whistle.api.EventContent</code>. Use Enumeration to define
+  EventType is recommended.
+
+- The Whistle needs to know what <code>EventType</code> will be published. Expose the event types which the system will publish As <code>
+  org.coderclan.whistle.example.producer.Config.eventTypes()</code> do.
+
+- Inject <code>org.coderclan.whistle.api.EventService</code> into your Spring Beans and call <code>EventService.publishEvent()</code>
+  to publish events.  <code>org.coderclan.whistle.example.producer.Notification</code> demonstrate how to do this.
+
 - Config connection
   for <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.amqp.rabbitmq">
   RabbitMQ</a>
-  or <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.kafka">Kafka</a>.
+  or <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.kafka">Kafka</a>
 
 ### Consumer
-
 - Depend on the Whistle in maven pom.xml.
 
 <pre>
@@ -121,12 +126,10 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
         &lt;/dependency>
 </pre>
 
-- Implement <code>org.coderclan.whistle.api.EventConsumer</code> to consume events. Remember to deal with the duplicated
-  events. Events with the same <code>org.coderclan.whistle.api.EventContent.getIdempotentId()</code> are
-  duplicated.  <code>org.coderclan.whistle.example.consumer.PredatorInSightEventConsumer</code> demonstrates how to
-  implement <code>EventConsumer</code>.
-- Register event consumers as Spring Bean, Whistle will find all Spring Beans which are instances of <code>EventConsumer</code>, and
-  use them to consume the events.
+- Implement <code>org.coderclan.whistle.api.EventConsumer</code> to consume events. Remember to deal with the duplicated events. Events with the same <code>org.coderclan.whistle.api.EventContent.getIdempotentId()</code> are duplicated. <code>org.coderclan.whistle.example.consumer.PredatorInSightEventConsumer</code> demonstrates how to implement <code>EventConsumer</code>.
+
+- Register event consumers as Spring Bean, Whistle will find all Spring Beans which are instances of <code>EventConsumer</code>, and use them to consume the events.
+
 - Config connection
   for <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.amqp.rabbitmq">
   RabbitMQ</a>
@@ -134,10 +137,9 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
 
 ## Configuration
 
-The Whistle uses Spring Cloud Stream, so all the configuration of Spring Cloud Stream could be adjusted. Please refer to
+The Whistle uses Spring Cloud Stream, so all the configuration properties of Spring Cloud Stream could be adjusted. Please refer to
 <a href="https://docs.spring.io/spring-cloud-stream/docs/current/reference/html/">Spring Cloud Stream Documentation</a>
-for more. The Whistle changed some of these configuration Items, please check <code>
-org.coderclan.whistle.spring-cloud-stream.properties</code>.
+for more. The Whistle has changed some of these configuration items. Please check <code>org.coderclan.whistle.spring-cloud-stream.properties</code> for details.
 
-The Whistle introduces some configuration items to change its behavior, <code>org.coderclan.whistle.*</code>, please check
-the application.yml in the module whistle-example-producer for details.
+The Whistle introduces some configuration properties to change its behavior, <code>org.coderclan.whistle.*</code>, please check
+the <code>application.yml</code> in the module whistle-example-producer for details.
