@@ -6,9 +6,6 @@ import org.coderclan.whistle.api.EventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationListener;
-import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,8 +20,11 @@ import java.util.Objects;
  * Created by aray(dot)chou(dot)cn(at)gmail(dot)com on 1/18/2018.
  */
 @ThreadSafe
-public class DatabaseEventPersistenter implements ApplicationListener<ContextRefreshedEvent>, EventPersistenter {
+public class DatabaseEventPersistenter implements EventPersistenter {
     private static final Logger log = LoggerFactory.getLogger(DatabaseEventPersistenter.class);
+    public static final String DB_MYSQL = "MySQL";
+    public static final String DB_H2 = "H2";
+    public static final String DB_ORACLE = "Oracle";
     @Autowired
     private final DataSource dataSource;
 
@@ -34,9 +34,8 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
     @Autowired
     private final EventTypeRegistrar eventTypeRegistrar;
 
-    @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}")
     private final String tableName;
-    private final String db;
+    private final String databaseProduct;
     private final String confirmSql;
     private final String retrieveSql;
     private final String[] createTableSql;
@@ -47,17 +46,12 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
         this.eventTypeRegistrar = eventTypeRegistrar;
         this.tableName = tableName;
 
-        this.db = databaseName();
+        this.databaseProduct = databaseName();
         this.confirmSql = getConfirmSql();
-        this.retrieveSql = this.getRetieveSql(Constants.MAX_QUEUE_COUNT);
+        this.retrieveSql = this.getRetrieveSql(Constants.MAX_QUEUE_COUNT);
         this.createTableSql = getCreateTableSql();
 
         createTable();
-    }
-
-    @Override
-    public void onApplicationEvent(ContextRefreshedEvent applicationEvent) {
-
     }
 
     /**
@@ -112,11 +106,11 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
 
     private String getConfirmSql() {
 
-        switch (db) {
-            case "MySQL":
-            case "H2":
+        switch (databaseProduct) {
+            case DB_MYSQL:
+            case DB_H2:
                 return "update " + tableName + " set success=true where id=?";
-            case "Oracle":
+            case DB_ORACLE:
                 return "update " + tableName + " set success=1 where rowid=?";
             default:
                 throw new RuntimeException("Unsupported Database.");
@@ -126,7 +120,6 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
     /**
      * Retrieve unconfirmed event.
      *
-     * @param count Max number of events to retrieve.
      * @return
      */
     @Override
@@ -188,9 +181,9 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
     }
 
     private String[] getCreateTableSql() {
-        switch (db) {
-            case "MySQL":
-            case "H2":
+        switch (databaseProduct) {
+            case DB_MYSQL:
+            case DB_H2:
                 return new String[]{"CREATE TABLE IF NOT EXISTS  " + tableName + " (\n" +
                         "  id int unsigned NOT NULL AUTO_INCREMENT,\n" +
                         "  event_type varchar(128) DEFAULT NULL,\n" +
@@ -201,7 +194,7 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
                         "  update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,\n" +
                         "  PRIMARY KEY (id)\n" +
                         ")"};
-            case "Oracle":
+            case DB_ORACLE:
                 return new String[]{
                         "CREATE SEQUENCE SEQ_SYS_PERSISTENT_EVENT\n",
                         "CREATE TABLE SYS_PERSISTENT_EVENT\n" +
@@ -230,13 +223,13 @@ public class DatabaseEventPersistenter implements ApplicationListener<ContextRef
         }
     }
 
-    private String getRetieveSql(int count) {
-        switch (db) {
-            case "MySQL":
+    private String getRetrieveSql(int count) {
+        switch (databaseProduct) {
+            case DB_MYSQL:
                 return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second limit " + count + " for update";
-            case "H2":
+            case DB_H2:
                 return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<DATEADD(second, -10, current_timestamp()) limit " + count + " for update";
-            case "Oracle":
+            case DB_ORACLE:
                 return "select rowid,event_type,event_content,retried_count from " + tableName + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) for update";
             default:
                 throw new RuntimeException("Unsupported Database.");
