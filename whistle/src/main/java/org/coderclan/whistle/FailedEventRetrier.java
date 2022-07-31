@@ -52,7 +52,7 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
         public void run() {
             List<Event<?>> events;
             do {
-                events = eventPersistenter.retrieveUnconfirmedEvent(Constants.MAX_QUEUE_COUNT);
+                events = eventPersistenter.retrieveUnconfirmedEvent();
                 if (Objects.isNull(events))
                     return;
                 for (Event<?> e : events) {

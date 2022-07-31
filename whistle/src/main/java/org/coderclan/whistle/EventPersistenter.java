@@ -23,5 +23,5 @@ public interface EventPersistenter {
      */
     void confirmEvent(String persistentEventId);
 
-    List<Event<?>> retrieveUnconfirmedEvent(int count);
+    List<Event<?>> retrieveUnconfirmedEvent();
 }

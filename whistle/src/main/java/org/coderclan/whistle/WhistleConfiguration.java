@@ -108,8 +108,13 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Bean("eventPersistenter")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public DatabaseEventPersistenter eventPersistenter() {
-        return new DatabaseEventPersistenter();
+    public DatabaseEventPersistenter eventPersistenter(
+            @Autowired    DataSource dataSource,
+            @Autowired EventContentSerializer serializer,
+            @Autowired EventTypeRegistrar eventTypeRegistrar,
+            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+    )  {
+        return new DatabaseEventPersistenter(dataSource,serializer,eventTypeRegistrar,tableName);
     }
 
     @Bean

@@ -1,9 +1,7 @@
 package org.coderclan.whistle.mongodb;
 
-import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.IndexOptions;
-import com.mongodb.client.model.Indexes;
 import com.mongodb.client.result.UpdateResult;
+import org.coderclan.whistle.Constants;
 import org.coderclan.whistle.Event;
 import org.coderclan.whistle.EventPersistenter;
 import org.coderclan.whistle.api.EventContent;
@@ -14,7 +12,6 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 
-import javax.annotation.PostConstruct;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -41,8 +38,8 @@ public class MongodbEventPersistenter implements EventPersistenter {
     }
 
     @Override
-    public List<Event<?>> retrieveUnconfirmedEvent(int count) {
-        List<MongoEvent> r = template.find(Query.query(Criteria.where("confirmed").is(false)).limit(count), MongoEvent.class);
+    public List<Event<?>> retrieveUnconfirmedEvent() {
+        List<MongoEvent> r = template.find(Query.query(Criteria.where("confirmed").is(false)).limit(Constants.MAX_QUEUE_COUNT), MongoEvent.class);
         return r.stream().map(e -> new Event<EventContent>(
                 e.getId(), e.getType(), e.getContent()
         )).collect(Collectors.toList());
