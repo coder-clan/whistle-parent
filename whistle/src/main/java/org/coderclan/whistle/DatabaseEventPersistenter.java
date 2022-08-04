@@ -171,8 +171,15 @@ public class DatabaseEventPersistenter implements EventPersistenter {
             for (String sql : createTableSql) {
                 try {
                     statement.execute(sql);
-                } catch (Exception e1) {
-                    log.error(sql, e1);
+                } catch (SQLSyntaxErrorException e) {
+                    // ORA-00955: name is already used by an existing object
+                    if (e.getErrorCode() == 955) {
+                        log.debug("Database objects already exists.");
+                    } else {
+                        log.error(sql, e);
+                    }
+                } catch (Exception e) {
+                    log.error(sql, e);
                 }
             }
         } catch (Exception e) {
