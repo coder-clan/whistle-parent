@@ -23,6 +23,7 @@ import java.util.Objects;
 public class DatabaseEventPersistenter implements EventPersistenter {
     private static final Logger log = LoggerFactory.getLogger(DatabaseEventPersistenter.class);
     public static final String DB_MYSQL = "MySQL";
+    public static final String DB_POSTGRESQL = "PostgreSQL";
     public static final String DB_H2 = "H2";
     public static final String DB_ORACLE = "Oracle";
     @Autowired
@@ -94,7 +95,11 @@ public class DatabaseEventPersistenter implements EventPersistenter {
                 Connection conn = dataSource.getConnection();
                 PreparedStatement statement = conn.prepareStatement(confirmSql);
         ) {
-            statement.setString(1, persistentEventId);
+            if (Objects.equals(databaseProduct, DB_ORACLE)) {
+                statement.setString(1, persistentEventId);
+            } else {
+                statement.setLong(1, Long.parseLong(persistentEventId));
+            }
             statement.addBatch();
             log.debug("Confirm event: persistentEventId={}", persistentEventId);
 
@@ -109,6 +114,7 @@ public class DatabaseEventPersistenter implements EventPersistenter {
         switch (databaseProduct) {
             case DB_MYSQL:
             case DB_H2:
+            case DB_POSTGRESQL:
                 return "update " + tableName + " set success=true where id=?";
             case DB_ORACLE:
                 return "update " + tableName + " set success=1 where rowid=?";
@@ -171,13 +177,8 @@ public class DatabaseEventPersistenter implements EventPersistenter {
             for (String sql : createTableSql) {
                 try {
                     statement.execute(sql);
-                } catch (SQLSyntaxErrorException e) {
-                    // ORA-00955: name is already used by an existing object
-                    if (e.getErrorCode() == 955) {
-                        log.debug("Database objects already exists.");
-                    } else {
-                        log.error(sql, e);
-                    }
+                } catch (SQLException e) {
+                    log.debug("", e);
                 } catch (Exception e) {
                     log.error(sql, e);
                 }
@@ -201,6 +202,24 @@ public class DatabaseEventPersistenter implements EventPersistenter {
                         "  update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,\n" +
                         "  PRIMARY KEY (id)\n" +
                         ")"};
+            case DB_POSTGRESQL:
+                return new String[]{"CREATE TABLE IF NOT EXISTS  " + tableName + " (\n" +
+                        "  id bigserial PRIMARY KEY,\n" +
+                        "  event_type varchar(128) DEFAULT NULL,\n" +
+                        "  retried_count int NOT NULL DEFAULT '0',\n" +
+                        "  event_content varchar(4096) NOT NULL,\n" +
+                        "  success boolean NOT NULL default false ,\n" +
+                        "  create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ,\n" +
+                        "  update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP  \n" +
+                        ")",
+                        "create or replace function sys_fun_update_time() returns trigger AS $$\n" +
+                                "begin\n" +
+                                "    new.update_time = current_timestamp;\n" +
+                                "    return new;\n" +
+                                "END;\n" +
+                                "$$ language plpgsql;",
+                        "CREATE TRIGGER trigger_sys_persistent_event before update on sys_persistent_event for each row execute procedure sys_fun_update_time();"
+                };
             case DB_ORACLE:
                 return new String[]{
                         "CREATE SEQUENCE SEQ_SYS_PERSISTENT_EVENT\n",
@@ -235,7 +254,8 @@ public class DatabaseEventPersistenter implements EventPersistenter {
             case DB_MYSQL:
                 return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second limit " + count + " for update";
             case DB_H2:
-                return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<DATEADD(second, -10, current_timestamp()) limit " + count + " for update";
+            case DB_POSTGRESQL:
+                return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second  limit " + count + " for update";
             case DB_ORACLE:
                 return "select rowid,event_type,event_content,retried_count from " + tableName + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) for update";
             default:
