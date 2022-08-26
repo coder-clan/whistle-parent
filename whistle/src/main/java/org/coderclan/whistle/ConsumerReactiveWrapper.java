@@ -10,6 +10,10 @@ import reactor.core.publisher.Mono;
 import java.util.function.Function;
 
 /**
+ * @deprecated It seems in reactive mode, There is no way to do retrying and deliverying to DLQ when exception.
+ * https://stackoverflow.com/questions/66304153/spring-cloud-stream-reactive-handling-messages-exception
+ * https://github.com/spring-cloud/spring-cloud-stream/issues/2124
+ *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
 public class ConsumerReactiveWrapper implements Function<Flux<EventContent>, Mono<Void>> {
