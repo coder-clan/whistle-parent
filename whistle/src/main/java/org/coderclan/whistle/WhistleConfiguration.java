@@ -71,19 +71,19 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     private void registerEventConsumers() {
-        if (Objects.isNull(consumers) || consumers.isEmpty())
-            return;
 
         StringBuilder beanNames = new StringBuilder(cloudStreamSupplier);
 
         int i = 0;
-        for (EventConsumer<?> c : this.consumers) {
-            i++;
+        if (!(Objects.isNull(consumers))) {
+            for (EventConsumer<?> c : this.consumers) {
+                i++;
 
-            String beanName = "whistleConsumer" + i;
-            beanNames.append(';').append(beanName);
+                String beanName = "whistleConsumer" + i;
+                beanNames.append(';').append(beanName);
 
-            registerConsumer(c, beanName);
+                registerConsumer(c, beanName);
+            }
         }
 
         System.setProperty("spring.cloud.function.definition", beanNames.toString());
@@ -109,12 +109,12 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
     public DatabaseEventPersistenter eventPersistenter(
-            @Autowired    DataSource dataSource,
+            @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar,
             @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
-    )  {
-        return new DatabaseEventPersistenter(dataSource,serializer,eventTypeRegistrar,tableName);
+    ) {
+        return new DatabaseEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
     }
 
     @Bean
@@ -138,13 +138,13 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    EventTypeRegistrar eventTypeRegistrar(@Autowired(required = false) List<Collection<? extends EventType<?>>> publishingEventType) {
+    public EventTypeRegistrar eventTypeRegistrar(@Autowired(required = false) List<Collection<? extends EventType<?>>> publishingEventType) {
         return new EventTypeRegistrar(publishingEventType);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    EventContentMessageConverter eventContentMessageConverter() {
+    public EventContentMessageConverter eventContentMessageConverter() {
         return new EventContentMessageConverter();
     }
 
@@ -155,14 +155,14 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    EventQueue eventQueue(@Value("${org.coderclan.whistle.eventQueueSize:128}") int eventQueueSize) {
+    public EventQueue eventQueue(@Value("${org.coderclan.whistle.eventQueueSize:128}") int eventQueueSize) {
         log.info("Size of Event Queue: {}.", eventQueueSize);
         return new EventQueueImpl(eventQueueSize);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    EventContentSerializer eventContentSerializer(@Autowired ObjectMapper objectMapper) {
+    public EventContentSerializer eventContentSerializer(@Autowired ObjectMapper objectMapper) {
         return new JacksonEventContentSerializer(objectMapper);
     }
 
