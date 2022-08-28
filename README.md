@@ -51,16 +51,16 @@ to read events from a BlockingQueue and send them to MQ.
 
 EventService, which is provided by the Whistle, its <code>publishEvent()</code> method will put the event into the
 BlockingQueue directly if there is no Database Transaction (@Transactional), or it will persist the event into the
-database and use <code>TransactionalEventHandler</code> to handle the event if Transaction is active. The TransactionalEventHandler
-will put the event into ThreadLocal, and register a callback (via TransactionSynchronization) to listen to the commit
-event of the current Transaction. When the transaction commits, the callback will be fired, it will get events from the
-ThreadLocal and put them into the BlockingQueue.
+database and use <code>TransactionalEventHandler</code> to handle the event if Transaction is active. The
+TransactionalEventHandler will put the event into ThreadLocal, and register a callback (via TransactionSynchronization)
+to listen to the commit event of the current Transaction. When the transaction commits, the callback will be fired, it
+will get events from the ThreadLocal and put them into the BlockingQueue.
 
 <code>FailedEventRetrier</code> will periodically retrieve unconfirmed events from the database and re-put them into the
 BlockingQueue.
 
-For consuming, the Whistle will look for all Spring Beans that are instances of <code>EventConsumer</code> and wrap
-them with <code>ConsumerWrapper</code>
+For consuming, the Whistle will look for all Spring Beans that are instances of <code>EventConsumer</code> and wrap them
+with <code>ConsumerWrapper</code>
 , and registers these ConsumerWrappers to Spring as Spring Beans. The Spring Cloud Stream will use these
 <code>ConsumerWrapper</code> Beans to consume events from MQ.
 
@@ -92,14 +92,32 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
             &lt;artifactId>spring-cloud-starter-stream-kafka&lt;/artifactId>
         &lt;/dependency>
 </pre>
+Make sure the version of Spring Cloud works with Spring Boot version in your project. please check the section "<code>
+Table 1. Release train Spring Boot compatibility</code>" on <a href="https://spring.io/projects/spring-cloud">the spring
+cloud official page</a> for a list of compatibility between Spring Cloud and Spring Boot. The following method may be
+used to specific the version of Spring Cloud.
+<pre>
+    &lt;dependencyManagement>
+         &lt;dependencies>
+             &lt;dependency>
+                 &lt;groupId>org.springframework.cloud &lt;/groupId>
+                 &lt;artifactId>spring-cloud-dependencies &lt;/artifactId>
+                 &lt;version>${spring-cloud.version} &lt;/version>
+                 &lt;type>pom &lt;/type>
+                 &lt;scope>import &lt;/scope>
+             &lt;/dependency>
+         &lt;/dependencies>
+     &lt;/dependencyManagement></pre>
 
-- Implement <code>org.coderclan.whistle.api.EventType</code> and <code>org.coderclan.whistle.api.EventContent</code>. Use Enumeration to define
-  EventType is recommended.
+- Implement <code>org.coderclan.whistle.api.EventType</code> and <code>org.coderclan.whistle.api.EventContent</code>.
+  Use Enumeration to define EventType is recommended.
 
-- The Whistle needs to know what <code>EventType</code> will be published. Expose the event types which the system will publish As <code>
+- The Whistle needs to know what <code>EventType</code> will be published. Expose the event types which the system will
+  publish As <code>
   org.coderclan.whistle.example.producer.Config.eventTypes()</code> do.
 
-- Inject <code>org.coderclan.whistle.api.EventService</code> into your Spring Beans and call <code>EventService.publishEvent()</code>
+- Inject <code>org.coderclan.whistle.api.EventService</code> into your Spring Beans and call <code>
+  EventService.publishEvent()</code>
   to publish events.  <code>org.coderclan.whistle.example.producer.Notification</code> demonstrate how to do this.
 
 - Config connection
@@ -108,6 +126,7 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
   or <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.kafka">Kafka</a>
 
 ### Consumer
+
 - Depend on the Whistle in maven pom.xml.
 
 <pre>
@@ -125,10 +144,30 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
             &lt;artifactId>spring-cloud-starter-stream-kafka&lt;/artifactId>
         &lt;/dependency>
 </pre>
+Make sure the version of Spring Cloud works with Spring Boot version in your project. please check the section "<code>
+Table 1. Release train Spring Boot compatibility</code>" on <a href="https://spring.io/projects/spring-cloud">the spring
+cloud official page</a> for a list of compatibility between Spring Cloud and Spring Boot. The following method may be
+used to specific the version of Spring Cloud.
+<pre>
+    &lt;dependencyManagement>
+         &lt;dependencies>
+             &lt;dependency>
+                 &lt;groupId>org.springframework.cloud &lt;/groupId>
+                 &lt;artifactId>spring-cloud-dependencies &lt;/artifactId>
+                 &lt;version>${spring-cloud.version} &lt;/version>
+                 &lt;type>pom &lt;/type>
+                 &lt;scope>import &lt;/scope>
+             &lt;/dependency>
+         &lt;/dependencies>
+     &lt;/dependencyManagement></pre>
 
-- Implement <code>org.coderclan.whistle.api.EventConsumer</code> to consume events. Remember to deal with the duplicated events. Events with the same <code>org.coderclan.whistle.api.EventContent.getIdempotentId()</code> are duplicated. <code>org.coderclan.whistle.example.consumer.PredatorInSightEventConsumer</code> demonstrates how to implement <code>EventConsumer</code>.
+- Implement <code>org.coderclan.whistle.api.EventConsumer</code> to consume events. Remember to deal with the duplicated
+  events. Events with the same <code>org.coderclan.whistle.api.EventContent.getIdempotentId()</code> are
+  duplicated. <code>org.coderclan.whistle.example.consumer.PredatorInSightEventConsumer</code> demonstrates how to
+  implement <code>EventConsumer</code>.
 
-- Register event consumers as Spring Bean, Whistle will find all Spring Beans which are instances of <code>EventConsumer</code>, and use them to consume the events.
+- Register event consumers as Spring Bean, Whistle will find all Spring Beans which are instances of <code>
+  EventConsumer</code>, and use them to consume the events.
 
 - Config connection
   for <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.amqp.rabbitmq">
@@ -137,9 +176,33 @@ whistle-example-producer-1.0.0-SNAPSHOT.jar)
 
 ## Configuration
 
-The Whistle uses Spring Cloud Stream, so all the configuration properties of Spring Cloud Stream could be adjusted. Please refer to
+The Whistle uses Spring Cloud Stream, so all the configuration properties of Spring Cloud Stream could be adjusted.
+Please refer to
 <a href="https://docs.spring.io/spring-cloud-stream/docs/current/reference/html/">Spring Cloud Stream Documentation</a>
-for more. The Whistle has changed some of these configuration items. Please check <code>org.coderclan.whistle.spring-cloud-stream.properties</code> for details.
+for more. The Whistle has changed some of these configuration items. Please check <code>
+org.coderclan.whistle.spring-cloud-stream.properties</code> for details.
 
-The Whistle introduces some configuration properties to change its behavior, <code>org.coderclan.whistle.*</code>, please check
-the <code>application.yml</code> in the module whistle-example-producer for details.
+The Whistle introduces some configuration properties to change its behavior, <code>org.coderclan.whistle.*</code>,
+please check the <code>application.yml</code> in the module whistle-example-producer for details.
+
+## Pitfalls
+
+### Compatibility between Spring Cloud and Spring Boot.
+
+Make sure the version of Spring Cloud works with Spring Boot version in your project. please check the section <code>
+Table 1. Release train Spring Boot compatibility</code> on <a href="https://spring.io/projects/spring-cloud">the spring
+cloud official page</a> for a list of compatibility between Spring Cloud and Spring Boot.
+
+### Problems of producing and consuming the same EventType in a single system
+
+If producing and consuming the same EventType in a single system, the Spring Cloud Stream will NOT send the event to
+Broker (i.e. RabbitMQ). This will cause two problems:
+
+- Other systems can NOT receive events of this EventType from Broker.
+- The Whistle will retry to send the events forever. Since the events are not sent to Broker, so there will be no ACK
+  from Broker, and there is no way to change the state of the event to successfully sent.
+
+Please redesign the system to avoid to produce and consume the same EventType in a single system. There is a discussion
+of the same problem in stackoverflow:
+<a
+href=""https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1">https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1</a>
