@@ -205,4 +205,4 @@ Broker (i.e. RabbitMQ). This will cause two problems:
 Please redesign the system to avoid to produce and consume the same EventType in a single system. There is a discussion
 of the same problem in stackoverflow:
 <a
-href=""https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1">https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1</a>
+href="https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1">https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1</a>
