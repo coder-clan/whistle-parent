@@ -1,6 +1,7 @@
 package org.coderclan.whistle.api;
 
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -8,10 +9,23 @@ import java.util.UUID;
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
 public abstract class EventContent implements Serializable {
+
     private String idempotentId = UUID.randomUUID().toString();
 
+    private Instant time = Instant.now();
+
+    /**
+     * @return Idempotent ID, could be used to check if duplication of Events.
+     */
     public String getIdempotentId() {
         return idempotentId;
+    }
+
+    /**
+     * @return Creating time of the Event, could be used to check the order of Events.
+     */
+    public Instant getTime() {
+        return time;
     }
 
     @Override
