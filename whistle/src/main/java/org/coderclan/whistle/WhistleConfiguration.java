@@ -32,7 +32,9 @@ import javax.sql.DataSource;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -43,9 +45,11 @@ import java.util.stream.Stream;
 @AutoConfigureAfter({DataSourceAutoConfiguration.class, WhistleMongodbConfiguration.class})
 public class WhistleConfiguration implements ApplicationContextAware {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
-    private final static String cloudStreamSupplier = "cloudStreamSupplier";
+    private static final String CLOUD_STREAM_SUPPLIER = "cloudStreamSupplier";
     @Autowired(required = false)
     private List<EventConsumer<?>> consumers;
+    @Autowired(required = false)
+    List<Collection<? extends EventType<?>>> publishingEventType;
 
     @Value("${org.coderclan.whistle.applicationName:${spring.application.name}}")
     private String applicationName;
@@ -61,6 +65,25 @@ public class WhistleConfiguration implements ApplicationContextAware {
     public void init() {
         checkApplicationName();
         registerEventConsumers();
+        checkEventType();
+    }
+
+    /**
+     * Whistle does NOT support producing and consuming an event at the same time.
+     */
+    private void checkEventType() {
+        if (Objects.isNull(consumers) || Objects.isNull(this.publishingEventType)) {
+            return;
+        }
+
+        Set<EventType<?>> consumingTypes = consumers.stream().map(EventConsumer::getSupportEventType).collect(Collectors.toSet());
+        Set<? extends EventType<?>> producingTypes = this.publishingEventType.stream().flatMap(Collection::stream).collect(Collectors.toSet());
+
+        producingTypes.retainAll(consumingTypes);
+        if (!producingTypes.isEmpty()) {
+            log.error("Whistle does NOT support producing and consuming an event at the same time. Please check the following events: {}", producingTypes.stream().map(EventType::getName).collect(Collectors.joining(",")));
+            throw new IllegalStateException("Whistle does NOT support producing and consuming an event at the same time.");
+        }
     }
 
     private void checkApplicationName() {
@@ -72,7 +95,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     private void registerEventConsumers() {
 
-        StringBuilder beanNames = new StringBuilder(cloudStreamSupplier);
+        StringBuilder beanNames = new StringBuilder(CLOUD_STREAM_SUPPLIER);
 
         int i = 0;
         if (!(Objects.isNull(consumers))) {
@@ -166,7 +189,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         return new JacksonEventContentSerializer(objectMapper);
     }
 
-    @Bean(cloudStreamSupplier)
+    @Bean(CLOUD_STREAM_SUPPLIER)
     public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventQueue eventQueue) {
         return () ->
                 Flux.fromStream(Stream.generate(() -> {

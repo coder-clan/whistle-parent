@@ -46,7 +46,7 @@
                 <groupId>net.jcip</groupId>
                 <artifactId>jcip-annotations</artifactId>
                 <version>1.0</version>
-             </dependency>
+            </dependency>
             <dependency>
                 <groupId>org.mongodb</groupId>
                 <artifactId>mongodb-driver-sync</artifactId>
@@ -122,4 +122,14 @@
             </resource>
         </resources>
     </build>
+    <distributionManagement>
+        <repository>
+            <id>maven-releases</id>
+            <url>http://10.113.75.27:8081/nexus/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>maven-snapshots</id>
+            <url>http://10.113.75.27:8081/nexus/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>
