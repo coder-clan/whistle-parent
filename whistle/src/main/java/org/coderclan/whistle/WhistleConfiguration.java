@@ -81,7 +81,9 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
         producingTypes.retainAll(consumingTypes);
         if (!producingTypes.isEmpty()) {
-            log.error("Whistle does NOT support producing and consuming an event at the same time. Please check the following events: {}", producingTypes.stream().map(EventType::getName).collect(Collectors.joining(",")));
+            if (log.isErrorEnabled()) {
+                log.error("Whistle does NOT support producing and consuming an event at the same time. Please check the following events: {}", producingTypes.stream().map(EventType::getName).collect(Collectors.joining(",")));
+            }
             throw new IllegalStateException("Whistle does NOT support producing and consuming an event at the same time.");
         }
     }
@@ -161,8 +163,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public EventTypeRegistrar eventTypeRegistrar(@Autowired(required = false) List<Collection<? extends EventType<?>>> publishingEventType) {
-        return new EventTypeRegistrar(publishingEventType);
+    public EventTypeRegistrar eventTypeRegistrar(@Autowired(required = false) List<Collection<? extends EventType<?>>> publishingEventType, @Autowired(required = false) List<EventConsumer<?>> consumers) {
+        return new EventTypeRegistrar(publishingEventType, consumers);
     }
 
     @Bean
