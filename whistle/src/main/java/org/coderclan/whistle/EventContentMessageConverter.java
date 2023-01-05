@@ -1,5 +1,7 @@
 package org.coderclan.whistle;
 
+import org.coderclan.whistle.api.EventContent;
+import org.coderclan.whistle.api.EventType;
 import org.coderclan.whistle.exception.EventContentTypeNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +34,9 @@ public class EventContentMessageConverter implements MessageConverter {
      */
     private AbstractMessageConverter jsonMessageConverter;
 
+    @Autowired
+    private EventTypeRegistrar eventTypeRegistrar;
+
     @PostConstruct
     public void init() {
 
@@ -53,18 +58,40 @@ public class EventContentMessageConverter implements MessageConverter {
 
     @Override
     public Object fromMessage(Message<?> message, Class<?> targetClass) {
+        Class<?> targetType = getJavaType(message);
+        return this.jsonMessageConverter.fromMessage(message, targetType);
+    }
+
+    private Class<?> getJavaType(Message<?> message) {
         String targetType = (String) message.getHeaders().get(Constants.CONTENT_JAVA_TYPE_HEADER);
-        if (Objects.isNull(targetType) || targetType.isEmpty()) {
-            log.warn("Message without Type Header received!");
-            return null;
+        log.trace("org-coderclan-whistle-java-type: {}", targetType);
+        Class<?> clazz = null;
+        try {
+            clazz = Class.forName(targetType);
+        } catch (ClassNotFoundException e) {
+            log.debug("", e);
         }
 
-        try {
-            Class<?> clazz = Class.forName(targetType);
-            return this.jsonMessageConverter.fromMessage(message, clazz);
-        } catch (ClassNotFoundException e) {
-            throw new EventContentTypeNotFoundException(e);
+        if (Objects.nonNull(clazz)) {
+            return clazz;
         }
+
+        String exchange = (String) message.getHeaders().get(Constants.RABBITMQ_HEADER_RECEIVED_EXCHANGE);
+        log.trace(Constants.RABBITMQ_HEADER_RECEIVED_EXCHANGE + ": {}", exchange);
+        if (Objects.isNull(exchange) || exchange.isEmpty()) {
+            exchange = (String) message.getHeaders().get(Constants.RABBITMQ_HEADER_ORIGINAL_EXCHANGE);
+            log.trace(Constants.RABBITMQ_HEADER_ORIGINAL_EXCHANGE + ": {}", exchange);
+        }
+
+        EventType<? extends EventContent> eventType = eventTypeRegistrar.findEventType(exchange);
+        if (Objects.nonNull(eventType)) {
+            clazz = eventType.getContentType();
+        }
+
+        if (Objects.isNull(clazz)) {
+            throw new EventContentTypeNotFoundException();
+        }
+        return clazz;
     }
 
     @Override
