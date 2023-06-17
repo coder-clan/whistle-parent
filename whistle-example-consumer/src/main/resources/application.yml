@@ -16,7 +16,22 @@ spring:
     stream:
       default:
         consumer:
-          concurrency: 1
+          # Threads of consumers of each Queue (Event Type). Increase it may increase throughput of consumer.
+          # https://cloud.spring.io/spring-cloud-stream/multi/multi__configuration_options.html#_consumer_properties
+          concurrency: 2
+
+      rabbit:
+        default:
+          consumer:
+            # The Following two parameters let the messages in Dead Latter Queue be re-sent to original queue 10 seconds latter.
+            # the parameter dlq-dead-letter-exchange must present and be empty.
+            # https://docs.spring.io/spring-cloud-stream/docs/current/reference/html/spring-cloud-stream-binder-rabbit.html#_retry_with_the_rabbitmq_binder
+            dlq-ttl: 10000
+            dlq-dead-letter-exchange:
+
+            # Set the prefetch count.
+            prefetch: 100
+
   datasource:
     url: jdbc:h2:mem:whistle-example-consumer
     username: sa
