@@ -38,6 +38,7 @@ public class EventContentMessageConverter implements MessageConverter {
     private EventTypeRegistrar eventTypeRegistrar;
 
     @PostConstruct
+    @jakarta.annotation.PostConstruct
     public void init() {
 
         // find a Message converter which supports application/json from this.messageConverter

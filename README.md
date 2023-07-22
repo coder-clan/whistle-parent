@@ -24,6 +24,9 @@ transactions are rolled back). However, events may be delayed or duplicated, or 
 If there is no database transaction, the Whistle can also be used to handle events. but there is no data consistency
 guarantee in this situation.
 
+## Change Log
+- 1.0.1 support spring boot 3.x
+
 ## Concepts
 
 The Whistle introduces four concepts: <code>EventType</code>, <code>EventContent</code>, <code>EventService</code>

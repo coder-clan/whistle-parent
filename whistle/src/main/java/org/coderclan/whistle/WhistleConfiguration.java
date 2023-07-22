@@ -62,6 +62,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @PostConstruct
+    @jakarta.annotation.PostConstruct
     public void init() {
         checkApplicationName();
         registerEventConsumers();
