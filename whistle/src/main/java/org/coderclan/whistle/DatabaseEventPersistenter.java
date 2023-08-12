@@ -91,8 +91,10 @@ public class DatabaseEventPersistenter implements EventPersistenter {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void confirmEvent(String persistentEventId) {
+        // get Collection of current Transaction.
+        // do NOT close this connection, it is managed by spring
+        Connection conn = DataSourceUtils.getConnection(this.dataSource);
         try (
-                Connection conn = dataSource.getConnection();
                 PreparedStatement statement = conn.prepareStatement(confirmSql);
         ) {
             if (Objects.equals(databaseProduct, DB_ORACLE)) {
@@ -131,14 +133,20 @@ public class DatabaseEventPersistenter implements EventPersistenter {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<Event<?>> retrieveUnconfirmedEvent() {
+        // get Collection of current Transaction.
+        // do NOT close this connection, it is managed by spring
+        Connection conn = DataSourceUtils.getConnection(this.dataSource);
+        boolean originalAutoCommit = false;
         try (
-                Connection conn = dataSource.getConnection();
                 Statement statement = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)
         ) {
             ArrayList<Event<?>> tempList = new ArrayList<>();
 
             // set auto commit to false to lock row in database to prevent other thread to requeue.
-            conn.setAutoCommit(false);
+            originalAutoCommit  = conn.getAutoCommit();
+            if(originalAutoCommit){
+                conn.setAutoCommit(false);
+            }
 
             ResultSet rs = statement.executeQuery(retrieveSql);
             int eventCount = 0;
@@ -163,6 +171,15 @@ public class DatabaseEventPersistenter implements EventPersistenter {
             return tempList;
         } catch (Exception e) {
             log.error("", e);
+        }
+        finally {
+            try {
+                if(originalAutoCommit){
+                    conn.setAutoCommit(true);
+                }
+            } catch (SQLException e) {
+                log.error("", e);
+            }
         }
 
         return Collections.emptyList();
