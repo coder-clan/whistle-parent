@@ -25,6 +25,7 @@ If there is no database transaction, the Whistle can also be used to handle even
 guarantee in this situation.
 
 ## Change Log
+- 1.0.2 fix the bug that transaction does not work in spring boot 3.
 - 1.0.1 support spring boot 3.x
 
 ## Concepts
