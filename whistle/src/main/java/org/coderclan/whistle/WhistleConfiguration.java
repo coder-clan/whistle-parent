@@ -22,10 +22,8 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 import reactor.core.publisher.Flux;
-import reactor.core.scheduler.Schedulers;
 
 import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
@@ -35,7 +33,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
@@ -146,8 +143,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Bean
     @ConditionalOnBean({EventPersistenter.class})
     @ConditionalOnMissingBean
-    public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter, @Autowired EventQueue eventQueue) {
-        return new FailedEventRetrier(persistenter, eventQueue);
+    public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter, @Autowired EventSender eventSender) {
+        return new FailedEventRetrier(persistenter, eventSender);
     }
 
     @Bean
@@ -158,8 +155,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public TransactionalEventHandler transactionEventHandler(@Autowired EventQueue eventQueue) {
-        return new TransactionalEventHandler(eventQueue);
+    public TransactionalEventHandler transactionEventHandler(@Autowired EventSender eventSender) {
+        return new TransactionalEventHandler(eventSender);
     }
 
     @Bean
@@ -181,9 +178,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public EventQueue eventQueue(@Value("${org.coderclan.whistle.eventQueueSize:128}") int eventQueueSize) {
-        log.info("Size of Event Queue: {}.", eventQueueSize);
-        return new EventQueueImpl(eventQueueSize);
+    public EventSender eventSender() {
+        return new ReactorEventSender();
     }
 
     @Bean
@@ -193,21 +189,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @Bean(CLOUD_STREAM_SUPPLIER)
-    public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventQueue eventQueue) {
-        return () ->
-                Flux.fromStream(Stream.generate(() -> {
-                    try {
-
-                        Event<? extends EventContent> event = eventQueue.take();
-
-                        return MessageBuilder.<EventContent>withPayload(event.getContent())
-                                .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())
-                                .setHeader(Constants.EVENT_PERSISTENT_ID_HEADER, event.getPersistentEventId())
-                                .build();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return null;
-                })).subscribeOn(Schedulers.boundedElastic()).share();
+    @ConditionalOnMissingBean
+    public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventSender eventSender) {
+        return eventSender::asFlux;
     }
 }
