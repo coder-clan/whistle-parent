@@ -66,15 +66,13 @@ public class EventContentMessageConverter implements MessageConverter {
     private Class<?> getJavaType(Message<?> message) {
         String targetType = (String) message.getHeaders().get(Constants.CONTENT_JAVA_TYPE_HEADER);
         log.trace("org-coderclan-whistle-java-type: {}", targetType);
-        Class<?> clazz = null;
-        try {
-            clazz = Class.forName(targetType);
-        } catch (ClassNotFoundException e) {
-            log.debug("", e);
-        }
 
-        if (Objects.nonNull(clazz)) {
-            return clazz;
+        if (Objects.nonNull(targetType) && !targetType.isEmpty()) {
+            try {
+                return Class.forName(targetType);
+            } catch (ClassNotFoundException e) {
+                log.debug("", e);
+            }
         }
 
         String exchange = (String) message.getHeaders().get(Constants.RABBITMQ_HEADER_RECEIVED_EXCHANGE);
@@ -86,13 +84,10 @@ public class EventContentMessageConverter implements MessageConverter {
 
         EventType<? extends EventContent> eventType = eventTypeRegistrar.findEventType(exchange);
         if (Objects.nonNull(eventType)) {
-            clazz = eventType.getContentType();
+            return eventType.getContentType();
         }
 
-        if (Objects.isNull(clazz)) {
-            throw new EventContentTypeNotFoundException();
-        }
-        return clazz;
+        throw new EventContentTypeNotFoundException();
     }
 
     @Override
