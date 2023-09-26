@@ -8,11 +8,8 @@ import org.coderclan.whistle.api.EventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
-import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.support.BeanDefinitionRegistry;
-import org.springframework.beans.factory.support.GenericBeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -95,38 +92,23 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     private void registerEventConsumers() {
 
-        StringBuilder beanNames = new StringBuilder(CLOUD_STREAM_SUPPLIER);
+        StringBuilder beanNamesStr = new StringBuilder(CLOUD_STREAM_SUPPLIER);
 
-        int i = 0;
-        if (!(Objects.isNull(consumers))) {
-            for (EventConsumer<?> c : this.consumers) {
-                i++;
+        String[] consumerBeanNames =
+                this.applicationContext.getBeanNamesForType(EventConsumer.class);
+        for (String consumerBeanName : consumerBeanNames) {
+            beanNamesStr.append(';').append(consumerBeanName);
 
-                String beanName = "whistleConsumer" + i;
-                beanNames.append(';').append(beanName);
+            EventConsumer<?> c = (EventConsumer<?>) this.applicationContext.getBean(consumerBeanName);
+            String topicName = c.getSupportEventType().getName();
 
-                registerConsumer(c, beanName);
-            }
+            //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
+            System.setProperty("spring.cloud.stream.function.bindings." + consumerBeanName + "-in-0", topicName);
         }
 
-        System.setProperty("spring.cloud.function.definition", beanNames.toString());
+        System.setProperty("spring.cloud.function.definition", beanNamesStr.toString());
         System.setProperty("spring.cloud.stream.default.group", this.applicationName);
     }
-
-    private void registerConsumer(EventConsumer<?> c, String beanName) {
-        //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
-        System.setProperty("spring.cloud.stream.function.bindings." + beanName + "-in-0", c.getSupportEventType().getName());
-
-        GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
-        beanDefinition.setBeanClass(ConsumerWrapper.class);
-
-        MutablePropertyValues mpv = new MutablePropertyValues();
-        beanDefinition.setPropertyValues(mpv);
-        mpv.add("eventConsumer", c);
-
-        ((BeanDefinitionRegistry) (this.applicationContext)).registerBeanDefinition(beanName, beanDefinition);
-    }
-
 
     @Bean("eventPersistenter")
     @ConditionalOnBean(DataSource.class)
@@ -163,12 +145,6 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ConditionalOnMissingBean
     public EventTypeRegistrar eventTypeRegistrar(@Autowired(required = false) List<Collection<? extends EventType<?>>> publishingEventType, @Autowired(required = false) List<EventConsumer<?>> consumers) {
         return new EventTypeRegistrar(publishingEventType, consumers);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public EventContentMessageConverter eventContentMessageConverter() {
-        return new EventContentMessageConverter();
     }
 
     @Bean

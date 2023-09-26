@@ -5,8 +5,6 @@ logging:
 server:
   port: 0
 spring:
-  main:
-    allow-circular-references: true
   h2:
     console:
       enabled: true
