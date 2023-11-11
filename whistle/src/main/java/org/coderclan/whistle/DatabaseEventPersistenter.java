@@ -205,14 +205,25 @@ public class DatabaseEventPersistenter implements EventPersistenter {
         }
     }
 
+    @SuppressWarnings("java:S1192")
     private String[] getCreateTableSql() {
         switch (databaseProduct) {
             case DB_MYSQL:
-            case DB_H2:
                 return new String[]{"CREATE TABLE IF NOT EXISTS  " + tableName + " (\n" +
                         "  id int unsigned NOT NULL AUTO_INCREMENT,\n" +
                         "  event_type varchar(128) DEFAULT NULL,\n" +
                         "  retried_count int unsigned NOT NULL DEFAULT '0',\n" +
+                        "  event_content varchar(4096) NOT NULL,\n" +
+                        "  success boolean NOT NULL default false ,\n" +
+                        "  create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ,\n" +
+                        "  update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP ,\n" +
+                        "  PRIMARY KEY (id)\n" +
+                        ")"};
+            case DB_H2:
+                return new String[]{"CREATE TABLE IF NOT EXISTS  " + tableName + " (\n" +
+                        "  id int NOT NULL AUTO_INCREMENT,\n" +
+                        "  event_type varchar(128) DEFAULT NULL,\n" +
+                        "  retried_count int NOT NULL DEFAULT '0',\n" +
                         "  event_content varchar(4096) NOT NULL,\n" +
                         "  success boolean NOT NULL default false ,\n" +
                         "  create_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ,\n" +
