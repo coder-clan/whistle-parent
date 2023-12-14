@@ -285,7 +285,7 @@ public class DatabaseEventPersistenter implements EventPersistenter {
             case DB_POSTGRESQL:
                 return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second  limit " + count + " for update";
             case DB_ORACLE:
-                return "select rowid,event_type,event_content,retried_count from " + tableName + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) for update";
+                return "select rowid,event_type,event_content,retried_count from " + tableName + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) for update skip locked";
             default:
                 throw new RuntimeException("Unsupported Database.");
         }
