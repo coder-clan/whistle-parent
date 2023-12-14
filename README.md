@@ -25,6 +25,7 @@ If there is no database transaction, the Whistle can also be used to handle even
 guarantee in this situation.
 
 ## Change Log
+
 - 1.0.2 fix the bug that transaction does not work in spring boot 3.
 - 1.0.1 support spring boot 3.x
 
@@ -127,7 +128,7 @@ used to specific the version of Spring Cloud.
 - Config connection
   for <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.amqp.rabbitmq">
   RabbitMQ</a>
-  or <a href="https://docs.spring.io/spring-boot/docs/current/reference/html/messaging.html#messaging.kafka">Kafka</a>
+  or <a href="https://docs.spring.iospring-boot/docs/current/reference/html/messaging.html#messaging.kafka">Kafka</a>
 
 ### Consumer
 
@@ -210,3 +211,10 @@ Please redesign the system to avoid to produce and consume the same EventType in
 of the same problem in stackoverflow:
 <a
 href="https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1">https://stackoverflow.com/questions/66729569/spring-cloud-stream-not-send-message-to-kafka-when-declare-producer-and-consumer?rq=1</a>
+
+### Event not persist to MongoDB in spring-data-mongodb
+
+Spring Data MongoDB does not enable transactions by default. The Whistle only persists events to the database if
+transactions are enabled. You can simply enable transactions by adding a Spring Bean of MongoTransactionManager. For an
+example, please refer to org.coderclan.whistle.example.producer.Config#transactionManager in the
+whistle-example-producer-mongo project.
