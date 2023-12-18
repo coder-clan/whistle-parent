@@ -5,6 +5,10 @@ import org.coderclan.whistle.api.EventConsumer;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
 import org.coderclan.whistle.api.EventType;
+import org.coderclan.whistle.rdbms.H2EventPersistenter;
+import org.coderclan.whistle.rdbms.MysqlEventPersistenter;
+import org.coderclan.whistle.rdbms.OracleEventPersistenter;
+import org.coderclan.whistle.rdbms.PostgresqlEventPersistenter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -12,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.ApplicationContext;
@@ -110,16 +115,56 @@ public class WhistleConfiguration implements ApplicationContextAware {
         System.setProperty("spring.cloud.stream.default.group", this.applicationName);
     }
 
-    @Bean("eventPersistenter")
+    @Bean("mysqlEventPersistenter")
+    @ConditionalOnClass(name = "com.mysql.cj.jdbc.Driver")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public DatabaseEventPersistenter eventPersistenter(
+    public MysqlEventPersistenter mysqlEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar,
             @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
     ) {
-        return new DatabaseEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+        return new MysqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+    }
+
+    @Bean("h2EventPersistenter")
+    @ConditionalOnClass(name = "org.h2.Driver")
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean
+    public H2EventPersistenter h2EventPersistenter(
+            @Autowired DataSource dataSource,
+            @Autowired EventContentSerializer serializer,
+            @Autowired EventTypeRegistrar eventTypeRegistrar,
+            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+    ) {
+        return new H2EventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+    }
+
+    @Bean("postgresqlEventPersistenter")
+    @ConditionalOnClass(name = "org.postgresql.Driver")
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean
+    public PostgresqlEventPersistenter postgresqlEventPersistenter(
+            @Autowired DataSource dataSource,
+            @Autowired EventContentSerializer serializer,
+            @Autowired EventTypeRegistrar eventTypeRegistrar,
+            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+    ) {
+        return new PostgresqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+    }
+
+    @Bean("oracleEventPersistenter")
+    @ConditionalOnClass(name = "oracle.jdbc.OracleDriver")
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean
+    public OracleEventPersistenter oracleEventPersistenter(
+            @Autowired DataSource dataSource,
+            @Autowired EventContentSerializer serializer,
+            @Autowired EventTypeRegistrar eventTypeRegistrar,
+            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+    ) {
+        return new OracleEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
     }
 
     @Bean
