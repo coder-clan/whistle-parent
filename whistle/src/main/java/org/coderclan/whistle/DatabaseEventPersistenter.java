@@ -168,7 +168,6 @@ public class DatabaseEventPersistenter implements EventPersistenter {
                 tempList.add(new Event(rs.getString(1), type, eventContent));
             }
             rs.close();
-            conn.commit();
             return tempList;
         } catch (Exception e) {
             log.error("", e);
