@@ -49,15 +49,19 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
     private class EventRetrierRunnable implements Runnable {
         @Override
         public void run() {
-            List<Event<?>> events;
-            do {
-                events = eventPersistenter.retrieveUnconfirmedEvent();
-                if (Objects.isNull(events))
-                    return;
-                for (Event<?> e : events) {
-                    eventSender.send(e);
-                }
-            } while (events.size() == Constants.MAX_QUEUE_COUNT);
+            try {
+                List<Event<?>> events;
+                do {
+                    events = eventPersistenter.retrieveUnconfirmedEvent();
+                    if (Objects.isNull(events))
+                        return;
+                    for (Event<?> e : events) {
+                        eventSender.send(e);
+                    }
+                } while (events.size() == Constants.MAX_QUEUE_COUNT);
+            } catch (Exception e) {
+                log.error("Exception countered when retrying the failed events.", e);
+            }
         }
     }
 
