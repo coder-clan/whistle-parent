@@ -2,9 +2,7 @@ package org.coderclan.whistle.example.producer.api;
 
 import org.coderclan.whistle.api.EventContent;
 
-import java.io.Serializable;
-
-public class PreyInformation extends EventContent implements Serializable {
+public class PreyInformation implements EventContent {
     private PreyType preyType;
     private Integer number;
 
