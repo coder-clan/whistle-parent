@@ -7,12 +7,6 @@ org:
       # Default value: ${spring.application.name}
       applicationName: ${spring.application.name}
 
-      # Event Queue Size, too small will cause high latency of delivering,
-      # since event failed to put into the queue will not be delivered until the next round of retry.
-      #
-      # Default value:  128
-      eventQueueSize: 32
-
       # Delay time of Re-deliver un-confirmed persisted events. Unit: Second.
       #
       # default value: 10
