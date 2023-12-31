@@ -19,15 +19,24 @@ The Whistle uses the following approaches to solve the data consistency problem 
 - Periodically retry to send the unsuccessful persistent event to MQ.
 
 Using this approach, events will never be lost, and there will be no phantom events (events sent to MQ, but database
-transactions are rolled back). However, events may be delayed or duplicated, or may be out of order.
+transactions were rolled back). However, events may be delayed or duplicated, or may be out of order.
 
 If there is no database transaction, the Whistle can also be used to handle events. but there is no data consistency
 guarantee in this situation.
 
 ## Change Log
 
-- 1.0.2 fix the bug that transaction does not work in spring boot 3.
-- 1.0.1 support spring boot 3.x
+- 1.1.0 Refactored to make the Whistle more flexible for customization.
+    - Breaking change: The original EventContent class has been renamed to AbstractEventContent. The EventContent is a
+      marker interface now. When upgrading from 1.0.x to 1.1.x, subclasses of original EventContent will encounter
+      compilation errors. To resolve this, change "extends EventContent" to "extends AbstractEventContent".
+    - Introduced interfaces for several components to allow user to custom these components more easily.
+    - Bug fixes:
+        - Resolved: The FailedEventRetrier stops retrying event sending when exceptions are thrown.
+        - Resolved deadlock issues in Oracle database by appending "skip lock" to the SQL for fetching failed events.
+        - Proper persistent table creation in H2 databases is now ensured.
+- 1.0.2 Fixed the bug that transaction does not work in spring boot 3.
+- 1.0.1 Supports spring boot 3.x
 
 ## Concepts
 
@@ -52,14 +61,18 @@ The Whistle uses <a href="https://docs.spring.io/spring-cloud-stream/docs/curren
 Stream</a> to handle event publishing and consuming.
 
 For publishing, the Spring Cloud Stream uses <code>org.coderclan.whistle.WhistleConfiguration.cloudStreamSupplier</code>
-to read events from a BlockingQueue and send them to MQ.
+to send events to MQ. The cloudStreamSupplier uses <code>org.coderclan.whistle.EventSender</code> to create a Flux
+of <code>EventContent</code>.
 
-EventService, which is provided by the Whistle, its <code>publishEvent()</code> method will put the event into the
-BlockingQueue directly if there is no Database Transaction (@Transactional), or it will persist the event into the
+EventService, which is provided by the Whistle, its <code>publishEvent()</code> method will call <code>
+org.coderclan.whistle.EventSender.send</code> to send events directly if there is no Database Transaction (
+@Transactional) enabled,
+or it will persist the event into the
 database and use <code>TransactionalEventHandler</code> to handle the event if Transaction is active. The
 TransactionalEventHandler will put the event into ThreadLocal, and register a callback (via TransactionSynchronization)
 to listen to the commit event of the current Transaction. When the transaction commits, the callback will be fired, it
-will get events from the ThreadLocal and put them into the BlockingQueue.
+will get events from the ThreadLocal and call <code>
+org.coderclan.whistle.EventSender.send</code> to send events.
 
 <code>FailedEventRetrier</code> will periodically retrieve unconfirmed events from the database and re-put them into the
 BlockingQueue.
