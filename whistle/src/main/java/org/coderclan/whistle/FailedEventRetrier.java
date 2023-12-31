@@ -1,6 +1,5 @@
 package org.coderclan.whistle;
 
-import org.coderclan.whistle.api.EventContent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,11 +26,11 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
 
     private final EventPersistenter eventPersistenter;
     private ScheduledExecutorService scheduler;
-    private final EventQueue eventQueue;
+    private final EventSender eventSender;
 
-    public FailedEventRetrier(@Autowired(required = false) EventPersistenter eventPersistenter, @Autowired EventQueue eventQueue) {
+    public FailedEventRetrier(@Autowired(required = false) EventPersistenter eventPersistenter, @Autowired EventSender eventSender) {
         this.eventPersistenter = eventPersistenter;
-        this.eventQueue = eventQueue;
+        this.eventSender = eventSender;
     }
 
     @Override
@@ -50,28 +49,18 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
     private class EventRetrierRunnable implements Runnable {
         @Override
         public void run() {
-            List<Event<?>> events;
-            do {
-                events = eventPersistenter.retrieveUnconfirmedEvent();
-                if (Objects.isNull(events))
-                    return;
-                for (Event<?> e : events) {
-                    this.putEventToQueue(e);
-                }
-            } while (events.size() == Constants.MAX_QUEUE_COUNT);
-        }
-
-        private <C extends EventContent> void putEventToQueue(Event<C> event) {
-            if (eventQueue.contains(event)) {
-                log.info("Event (persistentEventId={}) is already in the Sending Queue.", event.getPersistentEventId());
-                return;
-            }
-
-            boolean success = eventQueue.offer(event);
-            if (success) {
-                log.info("Requeued persistence event, eventId={} ", event.getPersistentEventId());
-            } else {
-                log.warn("Put event to queue failed.");
+            try {
+                List<Event<?>> events;
+                do {
+                    events = eventPersistenter.retrieveUnconfirmedEvent();
+                    if (Objects.isNull(events))
+                        return;
+                    for (Event<?> e : events) {
+                        eventSender.send(e);
+                    }
+                } while (events.size() == Constants.MAX_QUEUE_COUNT);
+            } catch (Exception e) {
+                log.error("Exception countered when retrying the failed events.", e);
             }
         }
     }

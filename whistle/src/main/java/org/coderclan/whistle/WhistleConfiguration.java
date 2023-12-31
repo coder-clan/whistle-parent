@@ -5,16 +5,18 @@ import org.coderclan.whistle.api.EventConsumer;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
 import org.coderclan.whistle.api.EventType;
+import org.coderclan.whistle.rdbms.H2EventPersistenter;
+import org.coderclan.whistle.rdbms.MysqlEventPersistenter;
+import org.coderclan.whistle.rdbms.OracleEventPersistenter;
+import org.coderclan.whistle.rdbms.PostgresqlEventPersistenter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
-import org.springframework.beans.MutablePropertyValues;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.support.BeanDefinitionRegistry;
-import org.springframework.beans.factory.support.GenericBeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.context.ApplicationContext;
@@ -22,10 +24,8 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
-import org.springframework.integration.support.MessageBuilder;
 import org.springframework.messaging.Message;
 import reactor.core.publisher.Flux;
-import reactor.core.scheduler.Schedulers;
 
 import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
@@ -35,7 +35,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
@@ -98,56 +97,81 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     private void registerEventConsumers() {
 
-        StringBuilder beanNames = new StringBuilder(CLOUD_STREAM_SUPPLIER);
+        StringBuilder beanNamesStr = new StringBuilder(CLOUD_STREAM_SUPPLIER);
 
-        int i = 0;
-        if (!(Objects.isNull(consumers))) {
-            for (EventConsumer<?> c : this.consumers) {
-                i++;
+        String[] consumerBeanNames =
+                this.applicationContext.getBeanNamesForType(EventConsumer.class);
+        for (String consumerBeanName : consumerBeanNames) {
+            beanNamesStr.append(';').append(consumerBeanName);
 
-                String beanName = "whistleConsumer" + i;
-                beanNames.append(';').append(beanName);
+            EventConsumer<?> c = (EventConsumer<?>) this.applicationContext.getBean(consumerBeanName);
+            String topicName = c.getSupportEventType().getName();
 
-                registerConsumer(c, beanName);
-            }
+            //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
+            System.setProperty("spring.cloud.stream.function.bindings." + consumerBeanName + "-in-0", topicName);
         }
 
-        System.setProperty("spring.cloud.function.definition", beanNames.toString());
+        System.setProperty("spring.cloud.function.definition", beanNamesStr.toString());
         System.setProperty("spring.cloud.stream.default.group", this.applicationName);
     }
 
-    private void registerConsumer(EventConsumer<?> c, String beanName) {
-        //-Dspring.cloud.stream.function.bindings.consumer0-in-0=xxx
-        System.setProperty("spring.cloud.stream.function.bindings." + beanName + "-in-0", c.getSupportEventType().getName());
-
-        GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
-        beanDefinition.setBeanClass(ConsumerWrapper.class);
-
-        MutablePropertyValues mpv = new MutablePropertyValues();
-        beanDefinition.setPropertyValues(mpv);
-        mpv.add("eventConsumer", c);
-
-        ((BeanDefinitionRegistry) (this.applicationContext)).registerBeanDefinition(beanName, beanDefinition);
-    }
-
-
-    @Bean("eventPersistenter")
+    @Bean("mysqlEventPersistenter")
+    @ConditionalOnClass(name = "com.mysql.cj.jdbc.Driver")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public DatabaseEventPersistenter eventPersistenter(
+    public MysqlEventPersistenter mysqlEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar,
             @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
     ) {
-        return new DatabaseEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+        return new MysqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+    }
+
+    @Bean("h2EventPersistenter")
+    @ConditionalOnClass(name = "org.h2.Driver")
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean
+    public H2EventPersistenter h2EventPersistenter(
+            @Autowired DataSource dataSource,
+            @Autowired EventContentSerializer serializer,
+            @Autowired EventTypeRegistrar eventTypeRegistrar,
+            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+    ) {
+        return new H2EventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+    }
+
+    @Bean("postgresqlEventPersistenter")
+    @ConditionalOnClass(name = "org.postgresql.Driver")
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean
+    public PostgresqlEventPersistenter postgresqlEventPersistenter(
+            @Autowired DataSource dataSource,
+            @Autowired EventContentSerializer serializer,
+            @Autowired EventTypeRegistrar eventTypeRegistrar,
+            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+    ) {
+        return new PostgresqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+    }
+
+    @Bean("oracleEventPersistenter")
+    @ConditionalOnClass(name = "oracle.jdbc.OracleDriver")
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnMissingBean
+    public OracleEventPersistenter oracleEventPersistenter(
+            @Autowired DataSource dataSource,
+            @Autowired EventContentSerializer serializer,
+            @Autowired EventTypeRegistrar eventTypeRegistrar,
+            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+    ) {
+        return new OracleEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
     }
 
     @Bean
     @ConditionalOnBean({EventPersistenter.class})
     @ConditionalOnMissingBean
-    public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter, @Autowired EventQueue eventQueue) {
-        return new FailedEventRetrier(persistenter, eventQueue);
+    public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter, @Autowired EventSender eventSender) {
+        return new FailedEventRetrier(persistenter, eventSender);
     }
 
     @Bean
@@ -158,8 +182,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public TransactionalEventHandler transactionEventHandler(@Autowired EventQueue eventQueue) {
-        return new TransactionalEventHandler(eventQueue);
+    public TransactionalEventHandler transactionEventHandler(@Autowired EventSender eventSender) {
+        return new TransactionalEventHandler(eventSender);
     }
 
     @Bean
@@ -170,20 +194,14 @@ public class WhistleConfiguration implements ApplicationContextAware {
 
     @Bean
     @ConditionalOnMissingBean
-    public EventContentMessageConverter eventContentMessageConverter() {
-        return new EventContentMessageConverter();
-    }
-
-    @Bean
     ServiceActivators cloudStreamConfig() {
         return new ServiceActivators();
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public EventQueue eventQueue(@Value("${org.coderclan.whistle.eventQueueSize:128}") int eventQueueSize) {
-        log.info("Size of Event Queue: {}.", eventQueueSize);
-        return new EventQueueImpl(eventQueueSize);
+    public EventSender eventSender() {
+        return new ReactorEventSender();
     }
 
     @Bean
@@ -193,21 +211,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @Bean(CLOUD_STREAM_SUPPLIER)
-    public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventQueue eventQueue) {
-        return () ->
-                Flux.fromStream(Stream.generate(() -> {
-                    try {
-
-                        Event<? extends EventContent> event = eventQueue.take();
-
-                        return MessageBuilder.<EventContent>withPayload(event.getContent())
-                                .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())
-                                .setHeader(Constants.EVENT_PERSISTENT_ID_HEADER, event.getPersistentEventId())
-                                .build();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return null;
-                })).subscribeOn(Schedulers.boundedElastic()).share();
+    @ConditionalOnMissingBean
+    public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventSender eventSender) {
+        return eventSender::asFlux;
     }
 }

@@ -1,10 +1,10 @@
 package org.coderclan.whistle.example.producer.api;
 
-import org.coderclan.whistle.api.EventContent;
+import org.coderclan.whistle.api.AbstractEventContent;
 
 import java.io.Serializable;
 
-public class PredatorInformation extends EventContent implements Serializable {
+public class PredatorInformation extends AbstractEventContent implements Serializable {
     private PredatorType predatorType;
     private Integer number;
     private String location;

@@ -23,7 +23,7 @@ public class EventServiceImpl implements EventService {
     @Autowired
     private TransactionalEventHandler transactionalEventHandler;
     @Autowired
-    private EventQueue eventQueue;
+    private EventSender eventSender;
 
     @Override
     public <C extends EventContent> void publishEvent(EventType<C> type, C content) {
@@ -33,14 +33,11 @@ public class EventServiceImpl implements EventService {
             String persistentEventId = eventPersistenter.persistEvent(type, content);
             transactionalEventHandler.addEvent(new Event<>(persistentEventId, type, content));
         } else {
-            this.putEventToQueue(null, type, content);
+            this.send(type, content);
         }
     }
 
-    private <C extends EventContent> void putEventToQueue(String persistentEventId, EventType<C> type, C content) {
-        boolean success = eventQueue.offer(new Event<C>(persistentEventId, type, content));
-        if (!success) {
-            log.warn("Put event to queue failed.");
-        }
+    private <C extends EventContent> void send(EventType<C> type, C content) {
+        eventSender.send(new Event<>(null, type, content));
     }
 }

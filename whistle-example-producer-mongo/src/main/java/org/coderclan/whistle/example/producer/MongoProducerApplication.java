@@ -13,10 +13,12 @@ public class MongoProducerApplication {
 
         Notification n = c.getBean(Notification.class);
         while (true) {
-            n.sendNotification();
             try {
+                n.sendNotification();
                 Thread.sleep(10 * 1000);
             } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }

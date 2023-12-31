@@ -4,6 +4,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
+ * @deprecated use {@link ReactorEventSender} instead.
  */
 public class EventQueueImpl implements EventQueue {
 

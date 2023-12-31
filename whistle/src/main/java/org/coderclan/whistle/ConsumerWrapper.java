@@ -10,7 +10,9 @@ import java.util.function.Consumer;
 
 /**
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
+ * @deprecated use {@link EventConsumer} directly instead.
  */
+@Deprecated
 public class ConsumerWrapper implements Consumer<EventContent> {
     private static final Logger log = LoggerFactory.getLogger(ConsumerWrapper.class);
 

@@ -5,7 +5,7 @@
     <parent>
         <artifactId>whistle-parent</artifactId>
         <groupId>org.coderclan</groupId>
-        <version>1.0.3</version><!-- whistle version -->
+        <version>1.1.0</version><!-- whistle version -->
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -33,12 +33,7 @@
         <dependency>
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>javax.annotation</groupId>
-            <artifactId>javax.annotation-api</artifactId>
-            <scope>compile</scope>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.coderclan</groupId>
