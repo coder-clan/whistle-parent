@@ -86,7 +86,7 @@ public class TransactionalEventHandler {
                 // put events into the Sending Queue
                 if (STATUS_COMMITTED == status) {
                     Queue<Event<?>> q = message.get();
-                    enqueueEvent(q);
+                    sendEvent(q);
                 }
             } finally {
 
@@ -95,7 +95,7 @@ public class TransactionalEventHandler {
             }
         }
 
-        private void enqueueEvent(Queue<Event<?>> q) {
+        private void sendEvent(Queue<Event<?>> q) {
             if (q == null || q.isEmpty()) {
                 return;
             }
@@ -104,7 +104,7 @@ public class TransactionalEventHandler {
                     eventSender.send(event);
                 }
             } catch (Exception e) {
-                logger.error("Put event to sending queue failed.", e);
+                logger.error("Sending failed.", e);
             }
         }
     };
