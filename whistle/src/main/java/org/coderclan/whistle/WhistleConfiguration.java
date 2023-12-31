@@ -193,6 +193,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @Bean
+    @ConditionalOnMissingBean
     ServiceActivators cloudStreamConfig() {
         return new ServiceActivators();
     }
