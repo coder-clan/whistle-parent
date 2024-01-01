@@ -37,7 +37,7 @@ public abstract class AbstractRdbmsEventPersistenter implements EventPersistente
         this.tableName = tableName;
 
         this.confirmSql = getConfirmSql();
-        this.retrieveSql = this.getRetrieveSql(Constants.MAX_QUEUE_COUNT);
+        this.retrieveSql = this.getRetrieveSql(Constants.RETRY_BATCH_COUNT);
         this.createTableSql = getCreateTableSql();
         this.insertSql = getInsertSql();
 
@@ -134,7 +134,7 @@ public abstract class AbstractRdbmsEventPersistenter implements EventPersistente
             ResultSet rs = statement.executeQuery(retrieveSql);
             int eventCount = 0;
             while (rs.next()) {
-                if (++eventCount > Constants.MAX_QUEUE_COUNT) {
+                if (++eventCount > Constants.RETRY_BATCH_COUNT) {
                     break;
                 }
                 rs.updateInt(4, rs.getInt(4) + 1);

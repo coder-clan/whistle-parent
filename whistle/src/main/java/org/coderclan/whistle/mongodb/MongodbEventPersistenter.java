@@ -39,7 +39,7 @@ public class MongodbEventPersistenter implements EventPersistenter {
 
     @Override
     public List<Event<?>> retrieveUnconfirmedEvent() {
-        List<MongoEvent> r = template.find(Query.query(Criteria.where("confirmed").is(false)).limit(Constants.MAX_QUEUE_COUNT), MongoEvent.class);
+        List<MongoEvent> r = template.find(Query.query(Criteria.where("confirmed").is(false)).limit(Constants.RETRY_BATCH_COUNT), MongoEvent.class);
         return r.stream().map(e -> new Event<EventContent>(
                 e.getId(), e.getType(), e.getContent()
         )).collect(Collectors.toList());
