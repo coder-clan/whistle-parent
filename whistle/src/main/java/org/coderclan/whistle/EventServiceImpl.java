@@ -33,6 +33,7 @@ public class EventServiceImpl implements EventService {
             String persistentEventId = eventPersistenter.persistEvent(type, content);
             transactionalEventHandler.addEvent(new Event<>(persistentEventId, type, content));
         } else {
+            log.info("Transaction is not active, send event without persisting!");
             this.send(type, content);
         }
     }
