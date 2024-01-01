@@ -77,10 +77,8 @@ org.coderclan.whistle.EventSender.send</code> to send events.
 <code>FailedEventRetrier</code> will periodically retrieve unconfirmed events from the database and re-put them into the
 BlockingQueue.
 
-For consuming, the Whistle will look for all Spring Beans that are instances of <code>EventConsumer</code> and wrap them
-with <code>ConsumerWrapper</code>
-, and registers these ConsumerWrappers to Spring as Spring Beans. The Spring Cloud Stream will use these
-<code>ConsumerWrapper</code> Beans to consume events from MQ.
+For consuming, the Whistle will look for all Spring Beans implementing <code>EventConsumer</code>, and config system properties for these beans
+to let Spring Cloud Stream to use them for consuming. Check <code>WhistleConfiguration.registerEventConsumers()</code> for details.
 
 ## How to use Whistle.
 
