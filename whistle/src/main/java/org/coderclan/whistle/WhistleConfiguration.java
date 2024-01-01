@@ -13,12 +13,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
@@ -41,6 +41,7 @@ import java.util.stream.Collectors;
  */
 @Configuration
 @PropertySource(value = "classpath:org/coderclan/whistle/spring-cloud-stream.properties", encoding = "UTF-8")
+@EnableConfigurationProperties(WhistleConfigurationProperties.class)
 @AutoConfigureAfter({DataSourceAutoConfiguration.class, WhistleMongodbConfiguration.class})
 public class WhistleConfiguration implements ApplicationContextAware {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
@@ -50,8 +51,9 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @Autowired(required = false)
     List<Collection<? extends EventType<?>>> publishingEventType;
 
-    @Value("${org.coderclan.whistle.applicationName:${spring.application.name}}")
-    private String applicationName;
+    @Autowired
+    private WhistleConfigurationProperties properties;
+
 
     private ApplicationContext applicationContext;
 
@@ -89,10 +91,11 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     private void checkApplicationName() {
-        if (Objects.isNull(this.applicationName) || this.applicationName.isEmpty()) {
+        String applicationName = this.properties.getApplicationName();
+        if (Objects.isNull(applicationName) || applicationName.isEmpty()) {
             throw new IllegalStateException("The Application Name must be set.");
         }
-        log.info("Whistle Application Name: {}.", this.applicationName);
+        log.info("Whistle Application Name: {}.", applicationName);
     }
 
     private void registerEventConsumers() {
@@ -112,7 +115,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
         }
 
         System.setProperty("spring.cloud.function.definition", beanNamesStr.toString());
-        System.setProperty("spring.cloud.stream.default.group", this.applicationName);
+        System.setProperty("spring.cloud.stream.default.group", this.properties.getApplicationName());
     }
 
     @Bean("mysqlEventPersistenter")
@@ -122,10 +125,9 @@ public class WhistleConfiguration implements ApplicationContextAware {
     public MysqlEventPersistenter mysqlEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
-            @Autowired EventTypeRegistrar eventTypeRegistrar,
-            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+            @Autowired EventTypeRegistrar eventTypeRegistrar
     ) {
-        return new MysqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+        return new MysqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
     }
 
     @Bean("h2EventPersistenter")
@@ -135,10 +137,9 @@ public class WhistleConfiguration implements ApplicationContextAware {
     public H2EventPersistenter h2EventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
-            @Autowired EventTypeRegistrar eventTypeRegistrar,
-            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+            @Autowired EventTypeRegistrar eventTypeRegistrar
     ) {
-        return new H2EventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+        return new H2EventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
     }
 
     @Bean("postgresqlEventPersistenter")
@@ -148,10 +149,9 @@ public class WhistleConfiguration implements ApplicationContextAware {
     public PostgresqlEventPersistenter postgresqlEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
-            @Autowired EventTypeRegistrar eventTypeRegistrar,
-            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
+            @Autowired EventTypeRegistrar eventTypeRegistrar
     ) {
-        return new PostgresqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+        return new PostgresqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
     }
 
     @Bean("oracleEventPersistenter")
@@ -161,10 +161,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
     public OracleEventPersistenter oracleEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
-            @Autowired EventTypeRegistrar eventTypeRegistrar,
-            @Value("${org.coderclan.whistle.table.producedEvent:sys_event_out}") String tableName
-    ) {
-        return new OracleEventPersistenter(dataSource, serializer, eventTypeRegistrar, tableName);
+            @Autowired EventTypeRegistrar eventTypeRegistrar) {
+        return new OracleEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
     }
 
     @Bean

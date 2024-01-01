@@ -12,11 +12,10 @@ org:
       # default value: 10
       retryDelay: 3
 
-      table:
-        # Database Table name for persisting events
-        #
-        # Default value: sys_event_out
-        producedEvent: sys_persistent_event
+      # Database Table name for persisting events
+      #
+      # Default value: sys_event_out
+      persistentTableName: sys_persistent_event
 
 spring:
   rabbitmq:
