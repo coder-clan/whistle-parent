@@ -7,7 +7,7 @@ import java.util.function.Consumer;
 /**
  * Consume event.
  * Implements must be thread safe!
- * Implements must hand duplicated messages. Duplicated messages could be determined by {@link EventContent#getIdempotentId()}
+ * Implements must hand duplicated messages. Duplicated messages could be determined by {@link AbstractEventContent#getIdempotentId()}
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
@@ -28,7 +28,7 @@ public interface EventConsumer<E extends EventContent> extends Consumer<E> {
 
     default void accept(E content) {
         try {
-           // log.trace("Received event: {}", content);
+            // log.trace("Received event: {}", content);
             if (!this.consume(content)) {
                 throw new ConsumerException("Consume failed.");
             }
