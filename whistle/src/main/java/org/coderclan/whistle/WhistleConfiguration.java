@@ -209,7 +209,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     }
 
     @Bean(CLOUD_STREAM_SUPPLIER)
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(name = CLOUD_STREAM_SUPPLIER)
     public Supplier<Flux<Message<EventContent>>> cloudStreamSupplier(@Autowired EventSender eventSender) {
         return eventSender::asFlux;
     }
