@@ -122,7 +122,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ConditionalOnClass(name = "com.mysql.cj.jdbc.Driver")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public MysqlEventPersistenter mysqlEventPersistenter(
+    public EventPersistenter mysqlEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar
@@ -134,7 +134,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ConditionalOnClass(name = "org.h2.Driver")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public H2EventPersistenter h2EventPersistenter(
+    public EventPersistenter h2EventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar
@@ -146,7 +146,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ConditionalOnClass(name = "org.postgresql.Driver")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public PostgresqlEventPersistenter postgresqlEventPersistenter(
+    public EventPersistenter postgresqlEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar
@@ -158,7 +158,7 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ConditionalOnClass(name = "oracle.jdbc.OracleDriver")
     @ConditionalOnBean(DataSource.class)
     @ConditionalOnMissingBean
-    public OracleEventPersistenter oracleEventPersistenter(
+    public EventPersistenter oracleEventPersistenter(
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar) {
