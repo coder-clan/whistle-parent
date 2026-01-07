@@ -7,6 +7,7 @@ import org.coderclan.whistle.EventPersistenter;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventType;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -39,7 +40,27 @@ public class MongodbEventPersistenter implements EventPersistenter {
 
     @Override
     public List<Event<?>> retrieveUnconfirmedEvent() {
-        List<MongoEvent> r = template.find(Query.query(Criteria.where("confirmed").is(false)).limit(Constants.RETRY_BATCH_COUNT), MongoEvent.class);
+        Query query = Query.query(Criteria.where("confirmed").is(false))
+                // Order by retry asc, id asc
+                // to ensure that events with lower retry counts are processed first,
+                .with(Sort.by(Sort.Direction.ASC, "retry","id"))
+                .limit(Constants.RETRY_BATCH_COUNT);
+        List<MongoEvent> r = template.find(query, MongoEvent.class);
+
+        // If there are results, increment their retry counter by 1 in the database.
+        if (!r.isEmpty()) {
+            List<String> ids = r.stream()
+                    .map(MongoEvent::getId)
+                    // sort by id to avoid deadlock in mongodb
+                    .sorted()
+                    .collect(Collectors.toList());
+            Query incQuery = Query.query(Criteria.where("id").in(ids));
+            Update incUpdate = new Update().inc("retry", 1);
+            template.update(MongoEvent.class)
+                    .matching(incQuery)
+                    .apply(incUpdate).all();
+        }
+
         return r.stream().map(e -> new Event<EventContent>(
                 e.getId(), e.getType(), e.getContent()
         )).collect(Collectors.toList());

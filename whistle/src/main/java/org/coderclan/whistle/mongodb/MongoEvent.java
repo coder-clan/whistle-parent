@@ -17,7 +17,7 @@ public class MongoEvent<C extends EventContent> {
     private final C content;
     @Indexed(partialFilter = "{confirmed:false}")
     private Boolean confirmed = false;
-    private Integer retry;
+    private Integer retry = 0;
 
     public MongoEvent(EventType<C> type, C content) {
         this.type = type;
@@ -35,4 +35,22 @@ public class MongoEvent<C extends EventContent> {
     public C getContent() {
         return content;
     }
+
+    // Accessors for fields used by persistence / other code
+    public Boolean getConfirmed() {
+        return confirmed;
+    }
+
+    public void setConfirmed(Boolean confirmed) {
+        this.confirmed = confirmed;
+    }
+
+    public Integer getRetry() {
+        return retry;
+    }
+
+    public void setRetry(Integer retry) {
+        this.retry = retry;
+    }
 }
+
