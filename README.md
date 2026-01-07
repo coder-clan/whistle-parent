@@ -26,6 +26,10 @@ guarantee in this situation.
 
 ## Change Log
 
+- 1.2.0 Added "skip lock" to retrieveSql of RdbmsEventPersistenter to prevent deadlock if underline database support it.
+    - Breaking change: The method signature of RdbmsEventPersistenter.getRetrieveSql(int) has been changed to RdbmsEventPersistenter.getRetrieveSql(int, boolean). If you have a custom
+      subclass of RdbmsEventPersistenter, please update the method signature accordingly.
+    - MongoDBEventPersistenter now records retry (times) in MongoDB database.
 - 1.1.0 Refactored to make the Whistle more flexible for customization.
     - Breaking change: The original EventContent class has been renamed to AbstractEventContent. The EventContent is a
       marker interface now. When upgrading from 1.0.x to 1.1.x, subclasses of original EventContent will encounter
