@@ -36,8 +36,12 @@ public class H2EventPersistenter extends AbstractRdbmsEventPersistenter {
                 ")"};
     }
 
-    protected String getRetrieveSql(int count) {
-        return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second  limit " + count + " for update";
+    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
+        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second ";
+        if (skipLockedSupported) {
+            return base + "limit " + count + " for update skip locked";
+        }
+        return base + "order by update_time, id limit " + count + " for update";
     }
 
 

@@ -19,7 +19,7 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
     }
 
     protected String getConfirmSql() {
-        return "update " + tableName + " set success=1 where rowid=?";
+        return "update " + tableName + " set success=1 where id=?";
     }
 
     @SuppressWarnings("java:S1192")
@@ -48,8 +48,13 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
         };
     }
 
-    protected String getRetrieveSql(int count) {
-        return "select rowid,event_type,event_content,retried_count from " + tableName + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) for update skip locked";
+    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
+        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) ";
+        if (skipLockedSupported) {
+            return base + "for update skip locked";
+        } else {
+            return base + "order by update_time, id for update";
+        }
     }
 
 

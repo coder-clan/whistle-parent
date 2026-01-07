@@ -39,12 +39,19 @@ public class PostgresqlEventPersistenter extends AbstractRdbmsEventPersistenter 
                         "    return new;\n" +
                         "END;\n" +
                         "$$ language plpgsql;",
-                "CREATE TRIGGER trigger_sys_persistent_event before update on sys_persistent_event for each row execute procedure sys_fun_update_time();"
+                "CREATE TRIGGER trigger_" + tableName + " before update on " + tableName + " for each row execute procedure sys_fun_update_time();"
         };
     }
 
-    protected String getRetrieveSql(int count) {
-        return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second  limit " + count + " for update";
+    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
+        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second ";
+        if (skipLockedSupported) {
+            // When supported, use SKIP LOCKED to avoid waiting on locked rows
+            return base + "limit " + count + " for update skip locked";
+        } else {
+            // When SKIP LOCKED not supported, add deterministic ordering to reduce deadlock risk
+            return base + "order by update_time, id limit " + count + " for update";
+        }
     }
 
 

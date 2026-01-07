@@ -36,8 +36,17 @@ public class MysqlEventPersistenter extends AbstractRdbmsEventPersistenter {
                 ")"};
     }
 
-    protected String getRetrieveSql(int count) {
-        return "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second limit " + count + " for update";
+    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
+        // Base selection condition
+        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second ";
+        if (skipLockedSupported) {
+            // If SKIP LOCKED is supported, use it to avoid waiting on locked rows
+            // Use LIMIT before FOR UPDATE as MySQL expects LIMIT then FOR UPDATE
+            return base + "limit " + count + " for update skip locked";
+        } else {
+            // If SKIP LOCKED not supported, add deterministic ordering to reduce deadlock risk
+            return base + "order by update_time, id limit " + count + " for update";
+        }
     }
 
 
