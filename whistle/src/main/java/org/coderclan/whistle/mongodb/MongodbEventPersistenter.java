@@ -45,7 +45,7 @@ public class MongodbEventPersistenter implements EventPersistenter {
                 // to ensure that events with lower retry counts are processed first,
                 .with(Sort.by(Sort.Direction.ASC, "retry","id"))
                 .limit(Constants.RETRY_BATCH_COUNT);
-        List<MongoEvent> r = template.find(query, MongoEvent.class);
+        List<MongoEvent<EventContent>> r = (List<MongoEvent<EventContent>>) (List<?>) template.find(query, MongoEvent.class);
 
         // If there are results, increment their retry counter by 1 in the database.
         if (!r.isEmpty()) {
@@ -61,8 +61,8 @@ public class MongodbEventPersistenter implements EventPersistenter {
                     .apply(incUpdate).all();
         }
 
-        return r.stream().map(e -> new Event<EventContent>(
-                e.getId(), e.getType(), e.getContent()
-        )).collect(Collectors.toList());
+        return r.stream()
+                .map(e -> new Event<>(e.getId(), e.getType(), e.getContent()))
+                .collect(Collectors.toList());
     }
 }
