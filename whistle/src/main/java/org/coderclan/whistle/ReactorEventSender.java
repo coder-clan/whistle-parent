@@ -23,6 +23,8 @@ public class ReactorEventSender implements EventSender {
                 .setHeader("spring.cloud.stream.sendto.destination", event.getType().getName())
                 .setHeader(Constants.EVENT_PERSISTENT_ID_HEADER, event.getPersistentEventId())
                 .build();
-        sink.emitNext(message, Sinks.EmitFailureHandler.FAIL_FAST);
+        synchronized (sink) {
+            sink.emitNext(message, Sinks.EmitFailureHandler.FAIL_FAST);
+        }
     }
 }
