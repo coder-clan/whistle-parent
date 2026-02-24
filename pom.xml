@@ -22,7 +22,7 @@
     <artifactId>whistle-parent</artifactId>
     <version>1.2.0</version><!-- whistle version -->
 
-    <name>Whistle</name>
+    <name>Whistle Parent</name>
     <url>https://github.com/coder-clan/whistle-parent</url>
     <description>The Whistle is a Reliable Event Delivering and Consuming mechanism for the Java Spring Boot
         framework.
@@ -110,6 +110,16 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.7.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>false</autoPublish>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.1</version>
@@ -186,14 +196,4 @@
             </resource>
         </resources>
     </build>
-    <distributionManagement>
-        <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
-        <repository>
-            <id>ossrh</id>
-            <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-        </repository>
-    </distributionManagement>
 </project>

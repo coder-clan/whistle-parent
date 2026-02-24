@@ -10,6 +10,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>whistle-example-producer</artifactId>
+    <name>Whistle Example Producer</name>
+    <url>https://github.com/coder-clan/whistle-parent</url>
+
     <dependencies>
         <dependency>
             <groupId>org.coderclan</groupId>
