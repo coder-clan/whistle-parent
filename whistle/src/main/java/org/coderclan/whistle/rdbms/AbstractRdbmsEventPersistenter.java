@@ -110,8 +110,8 @@ public abstract class AbstractRdbmsEventPersistenter implements EventPersistente
             return versionGreaterThan(ver, 9,0);
         }
         if (lower.contains("h2")) {
-            // H2: SKIP LOCKED supported since version 1.4.200
-            return versionGreaterThan(ver, 1,5);
+            // H2: SKIP LOCKED supported since version 2.2.220
+            return versionGreaterThan(ver, 2,2);
         }
         return false;
     }

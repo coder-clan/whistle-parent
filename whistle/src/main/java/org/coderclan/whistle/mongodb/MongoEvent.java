@@ -13,11 +13,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class MongoEvent<C extends EventContent> {
     @Id
     private String id;
-    private final EventType<C> type;
-    private final C content;
+    private EventType<C> type;
+    private C content;
     @Indexed(partialFilter = "{confirmed:false}")
     private Boolean confirmed = false;
     private Integer retry = 0;
+
+    public MongoEvent() {
+    }
 
     public MongoEvent(EventType<C> type, C content) {
         this.type = type;
@@ -36,7 +39,6 @@ public class MongoEvent<C extends EventContent> {
         return content;
     }
 
-    // Accessors for fields used by persistence / other code
     public Boolean getConfirmed() {
         return confirmed;
     }
@@ -53,4 +55,3 @@ public class MongoEvent<C extends EventContent> {
         this.retry = retry;
     }
 }
-

@@ -1,6 +1,5 @@
 package org.coderclan.whistle;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.coderclan.whistle.api.EventConsumer;
 import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventService;
@@ -12,12 +11,12 @@ import org.coderclan.whistle.rdbms.PostgresqlEventPersistenter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -27,7 +26,6 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.messaging.Message;
 import reactor.core.publisher.Flux;
 
-import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
 import java.util.Collection;
 import java.util.List;
@@ -42,8 +40,8 @@ import java.util.stream.Collectors;
 @Configuration
 @PropertySource(value = "classpath:org/coderclan/whistle/spring-cloud-stream.properties", encoding = "UTF-8")
 @EnableConfigurationProperties(WhistleConfigurationProperties.class)
-@AutoConfigureAfter({DataSourceAutoConfiguration.class, WhistleMongodbConfiguration.class})
-public class WhistleConfiguration implements ApplicationContextAware {
+@AutoConfigureAfter(name = {"org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration", "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration", "org.coderclan.whistle.WhistleMongodbConfiguration"})
+public class WhistleConfiguration implements ApplicationContextAware, InitializingBean {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
     private static final String CLOUD_STREAM_SUPPLIER = "cloudStreamSupplier";
     @Autowired(required = false)
@@ -62,9 +60,8 @@ public class WhistleConfiguration implements ApplicationContextAware {
         this.applicationContext = applicationContext;
     }
 
-    @PostConstruct
-    @jakarta.annotation.PostConstruct
-    public void init() {
+    @Override
+    public void afterPropertiesSet() {
         checkApplicationName();
         registerEventConsumers();
         checkEventType();
@@ -200,12 +197,6 @@ public class WhistleConfiguration implements ApplicationContextAware {
     @ConditionalOnMissingBean
     public EventSender eventSender() {
         return new ReactorEventSender();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public EventContentSerializer eventContentSerializer(@Autowired ObjectMapper objectMapper) {
-        return new JacksonEventContentSerializer(objectMapper);
     }
 
     @Bean(CLOUD_STREAM_SUPPLIER)

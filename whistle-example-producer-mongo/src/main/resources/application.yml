@@ -25,7 +25,7 @@ spring:
     name: whistle-example-producer
   data:
     mongodb:
-      uri: "mongodb://whistle:simplepwd@172.25.240.101:27017,172.25.240.102:27017,172.25.240.103:27017/whistle"
+      uri: "mongodb://test:xxxxxxxaxx@127.0.0.1:27017,127.0.0.1:27018/test"
       auto-index-creation: true
 
 logging:
