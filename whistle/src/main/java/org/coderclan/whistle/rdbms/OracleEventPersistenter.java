@@ -19,7 +19,7 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
     }
 
     protected String getConfirmSql() {
-        return "update " + tableName + " set success=1 where id=?";
+        return "update " + tableName + " set success=1 where rowid=?";
     }
 
     @SuppressWarnings("java:S1192")
@@ -52,9 +52,17 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
 
     @Override
     protected String getOrderedBaseRetrieveSql(int count) {
-        return "select id,event_type,event_content,retried_count from " + tableName
+        return "select rowid,event_type,event_content,retried_count from " + tableName
                 + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) "
-                + "order by retried_count asc, id desc fetch first " + count + " rows only";
+                + "order by retried_count asc, id desc"
+
+                // select rowid,event_type,event_content,retried_count from sys_persistent_event where success=0 and update_time<(systimestamp - INTERVAL '10' second ) order by retried_count asc, id desc fetch first 32 rows only for update skip locked
+                // ORA-02014: 不能从具有 DISTINCT, GROUP BY 等的视图选择 FOR UPDATE
+                // the following line can NOT be used.
+                //
+                //   + " fetch first " + count + " rows only"
+
+                ;
     }
 
 
