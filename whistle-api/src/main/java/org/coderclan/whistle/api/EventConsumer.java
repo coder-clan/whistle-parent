@@ -35,6 +35,8 @@ public interface EventConsumer<E extends EventContent> extends Consumer<E> {
             if (!this.consume(content)) {
                 throw new ConsumerException("Consume failed.");
             }
+        } catch (ConsumerException e) {
+            throw e;
         } catch (Exception e) {
             throw new ConsumerException(e);
         }
