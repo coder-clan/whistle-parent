@@ -3,7 +3,6 @@
 package org.coderclan.whistle.example.producer;
 
 import org.coderclan.whistle.example.producer.api.ExampleEventType;
-import org.coderclan.whistle.mongodb.MongodbEventPersistenter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoDatabaseFactory;

@@ -2,6 +2,7 @@ package org.coderclan.whistle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.ApplicationListener;
@@ -17,19 +18,19 @@ import java.util.concurrent.TimeUnit;
  *
  * @author aray(dot)chou(dot)cn(at)gmail(dot)com
  */
-public class FailedEventRetrier implements ApplicationListener<ApplicationStartedEvent> {
+public class FailedEventRetrier implements ApplicationListener<ApplicationStartedEvent>, DisposableBean {
     private static final Logger log = LoggerFactory.getLogger(FailedEventRetrier.class);
 
-    @Autowired
-    private WhistleConfigurationProperties properties;
+    private final WhistleConfigurationProperties properties;
 
     private final EventPersistenter eventPersistenter;
     private ScheduledExecutorService scheduler;
     private final EventSender eventSender;
 
-    public FailedEventRetrier(@Autowired(required = false) EventPersistenter eventPersistenter, @Autowired EventSender eventSender) {
+    public FailedEventRetrier(@Autowired(required = false) EventPersistenter eventPersistenter, @Autowired EventSender eventSender, @Autowired WhistleConfigurationProperties properties) {
         this.eventPersistenter = eventPersistenter;
         this.eventSender = eventSender;
+        this.properties = properties;
     }
 
     @Override
@@ -61,6 +62,14 @@ public class FailedEventRetrier implements ApplicationListener<ApplicationStarte
             } catch (Exception e) {
                 log.error("Exception countered when retrying the failed events.", e);
             }
+        }
+    }
+
+    @Override
+    public void destroy() {
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+            log.info("FailedEventRetrier scheduler shut down.");
         }
     }
 

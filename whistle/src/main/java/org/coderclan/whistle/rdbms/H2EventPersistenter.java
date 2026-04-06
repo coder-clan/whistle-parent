@@ -14,8 +14,8 @@ import java.sql.SQLException;
  */
 @ThreadSafe
 public class H2EventPersistenter extends AbstractRdbmsEventPersistenter {
-    public H2EventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName) {
-        super(dataSource, serializer, eventTypeRegistrar, tableName);
+    public H2EventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName, int retrieveTransactionTimeout) {
+        super(dataSource, serializer, eventTypeRegistrar, tableName, retrieveTransactionTimeout);
     }
 
     protected String getConfirmSql() {
@@ -36,12 +36,11 @@ public class H2EventPersistenter extends AbstractRdbmsEventPersistenter {
                 ")"};
     }
 
-    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
-        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second ";
-        if (skipLockedSupported) {
-            return base + "limit " + count + " for update skip locked";
-        }
-        return base + "order by update_time, id limit " + count + " for update";
+    @Override
+    protected String getOrderedBaseRetrieveSql(int count) {
+        return "select id,event_type,event_content,retried_count from " + tableName
+                + " where success=false and update_time<current_timestamp - INTERVAL '10' second "
+                + "order by retried_count asc, id desc limit " + count;
     }
 
 

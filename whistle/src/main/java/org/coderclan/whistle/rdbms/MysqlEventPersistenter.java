@@ -14,8 +14,8 @@ import java.sql.SQLException;
  */
 @ThreadSafe
 public class MysqlEventPersistenter extends AbstractRdbmsEventPersistenter {
-    public MysqlEventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName) {
-        super(dataSource, serializer, eventTypeRegistrar, tableName);
+    public MysqlEventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName, int retrieveTransactionTimeout) {
+        super(dataSource, serializer, eventTypeRegistrar, tableName, retrieveTransactionTimeout);
     }
 
     protected String getConfirmSql() {
@@ -36,17 +36,11 @@ public class MysqlEventPersistenter extends AbstractRdbmsEventPersistenter {
                 ")"};
     }
 
-    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
-        // Base selection condition
-        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<now()- INTERVAL 10 second ";
-        if (skipLockedSupported) {
-            // If SKIP LOCKED is supported, use it to avoid waiting on locked rows
-            // Use LIMIT before FOR UPDATE as MySQL expects LIMIT then FOR UPDATE
-            return base + "limit " + count + " for update skip locked";
-        } else {
-            // If SKIP LOCKED not supported, add deterministic ordering to reduce deadlock risk
-            return base + "order by update_time, id limit " + count + " for update";
-        }
+    @Override
+    protected String getOrderedBaseRetrieveSql(int count) {
+        return "select id,event_type,event_content,retried_count from " + tableName
+                + " where success=false and update_time<now()- INTERVAL 10 second "
+                + "order by retried_count asc, id desc limit " + count;
     }
 
 

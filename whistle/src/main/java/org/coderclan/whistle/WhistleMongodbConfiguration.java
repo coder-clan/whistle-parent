@@ -4,8 +4,6 @@ import com.mongodb.MongoClientSettings;
 import org.coderclan.whistle.mongodb.EventType2StringConverter;
 import org.coderclan.whistle.mongodb.MongodbEventPersistenter;
 import org.coderclan.whistle.mongodb.String2EventTypeConverter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -24,13 +22,12 @@ import java.util.Arrays;
 @AutoConfigureAfter(name = {"org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration", "org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration"})
 @ConditionalOnClass(MongoCustomConversions.class)
 public class WhistleMongodbConfiguration {
-    private static final Logger log = LoggerFactory.getLogger(WhistleMongodbConfiguration.class);
 
     @Bean("eventPersistenter")
     @ConditionalOnBean(MongoClientSettings.class)
     @ConditionalOnMissingBean
-    MongodbEventPersistenter mongodbEventPersistenter() {
-        return new MongodbEventPersistenter();
+    MongodbEventPersistenter mongodbEventPersistenter(@Autowired org.springframework.data.mongodb.core.MongoTemplate mongoTemplate) {
+        return new MongodbEventPersistenter(mongoTemplate);
     }
 
     @Bean

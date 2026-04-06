@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "SonarQube Scan & Fix",
+  "description": "Manually triggered hook that runs SonarQube analysis against a local SonarQube instance (localhost:9000) and asks the agent to review and fix any reported code quality issues.",
+  "version": "1.0.0",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Run SonarQube analysis by executing 'mvn sonar:sonar -pl whistle -Dsonar.host.url=http://localhost:9000 -Dsonar.token=sqa_fe9983b1b9fb67d85684b9db477dc564707e8ff0' from the project root. If authentication fails (e.g. 401 Unauthorized), tell the user they need to log into SonarQube at http://localhost:9000, change the default password, and then update this hook's prompt with the new credentials or a generated token (replace -Dsonar.login and -Dsonar.password with -Dsonar.token=<their-token>). After the scan completes successfully, review the SonarQube report output for any bugs, code smells, vulnerabilities, or security hotspots. For each issue found, fix the code directly following the project's coding standards defined in the steering files. Summarize what you fixed when done."
+  },
+  "workspaceFolderName": "whistle-parent",
+  "shortName": "sonarqube-scan-fix"
+}

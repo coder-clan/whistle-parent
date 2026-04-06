@@ -14,8 +14,8 @@ import java.sql.SQLException;
  */
 @ThreadSafe
 public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
-    public OracleEventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName) {
-        super(dataSource, serializer, eventTypeRegistrar, tableName);
+    public OracleEventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName, int retrieveTransactionTimeout) {
+        super(dataSource, serializer, eventTypeRegistrar, tableName, retrieveTransactionTimeout);
     }
 
     protected String getConfirmSql() {
@@ -48,13 +48,11 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
         };
     }
 
-    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
-        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) ";
-        if (skipLockedSupported) {
-            return base + "for update skip locked";
-        } else {
-            return base + "order by update_time, id for update";
-        }
+    @Override
+    protected String getOrderedBaseRetrieveSql(int count) {
+        return "select id,event_type,event_content,retried_count from " + tableName
+                + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) "
+                + "order by retried_count asc, id desc";
     }
 
 

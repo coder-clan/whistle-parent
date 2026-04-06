@@ -110,3 +110,100 @@ Implement the 4 design areas from the "Addendum: Spring Boot 4 / Java 25 Compati
 - Each task references specific requirements for traceability
 - Property tests validate the 5 new correctness properties (28-32) from the design addendum
 - The implementation language is Java, matching the existing codebase
+
+---
+
+## Addendum: Bugfix — Retrieve SQL Missing ORDER BY for SKIP LOCKED and NOWAIT Paths
+
+### Overview
+
+Fix `AbstractRdbmsEventPersistenter.buildRetrieveSql()` so that all three locking paths (SKIP LOCKED, NOWAIT, plain FOR UPDATE) use `getOrderedBaseRetrieveSql()` instead of only the fallback path. Then remove the now-dead `getBaseRetrieveSql()` abstract method and all four subclass overrides. Update existing tests and add new property tests for the fix.
+
+### Tasks
+
+- [x] 8. Write bug condition exploration test
+  - **Property 1: Bug Condition** - All Locking Paths Use Ordered SQL
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Scope the property to cases where `isBugCondition(X)` is true: `supportsSkipLocked=true` OR (`supportsSkipLocked=false` AND `supportsNowait=true`)
+  - Create test class `whistle/src/test/java/org/coderclan/whistle/OrderedSqlBugConditionProperties.java`
+  - Use the same `TestPersistenter` pattern and reflection approach from `LockingClausePriorityProperties` to set `supportsSkipLocked`/`supportsNowait` fields and invoke `buildRetrieveSql(int)`
+  - **Property 33: Bug Condition — All locking paths use ordered SQL**
+  - For any `(supportsSkipLocked, supportsNowait, count)` where `supportsSkipLocked=true` OR `supportsNowait=true`, assert `buildRetrieveSql(count)` contains `order by retried_count asc, id desc`
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists: SKIP LOCKED and NOWAIT paths produce SQL without ORDER BY)
+  - Document counterexamples found (e.g., `supportsSkipLocked=true, count=32` produces SQL without `order by`)
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 2.1, 2.2_
+
+- [x] 9. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Locking Clauses Unchanged After Fix
+  - **IMPORTANT**: Follow observation-first methodology
+  - Create test class `whistle/src/test/java/org/coderclan/whistle/LockingClausePreservationProperties.java`
+  - Use the same `TestPersistenter` pattern and reflection approach from `LockingClausePriorityProperties`
+  - **Property 34: Preservation — Locking clauses unchanged after fix**
+  - Observe on UNFIXED code: `buildRetrieveSql()` with `supportsSkipLocked=true` ends with `for update skip locked`
+  - Observe on UNFIXED code: `buildRetrieveSql()` with `supportsNowait=true, supportsSkipLocked=false` ends with `for update nowait`
+  - Observe on UNFIXED code: `buildRetrieveSql()` with both false ends with `for update`
+  - Write property-based test: for all `(supportsSkipLocked, supportsNowait, count)` combinations, verify the correct locking clause suffix is present
+  - Verify test passes on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline locking clause behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3_
+
+- [x] 10. Fix buildRetrieveSql() and remove dead code
+
+  - [x] 10.1 Fix buildRetrieveSql() to use getOrderedBaseRetrieveSql() for all paths
+    - In `AbstractRdbmsEventPersistenter.buildRetrieveSql(int count)`, replace `getBaseRetrieveSql(count)` with `getOrderedBaseRetrieveSql(count)` in both the SKIP LOCKED and NOWAIT branches
+    - _Bug_Condition: isBugCondition(input) where input.supportsSkipLocked = true OR input.supportsNowait = true_
+    - _Expected_Behavior: buildRetrieveSql(count) CONTAINS "order by retried_count asc, id desc" for ALL (supportsSkipLocked, supportsNowait) combinations_
+    - _Preservation: Locking clause suffixes unchanged — "for update skip locked", "for update nowait", "for update"_
+    - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3_
+
+  - [x] 10.2 Remove getBaseRetrieveSql() abstract method and all subclass overrides
+    - Remove the abstract `getBaseRetrieveSql(int count)` method declaration and its Javadoc from `AbstractRdbmsEventPersistenter`
+    - Remove `getBaseRetrieveSql(int count)` override from `MysqlEventPersistenter`
+    - Remove `getBaseRetrieveSql(int count)` override from `PostgresqlEventPersistenter`
+    - Remove `getBaseRetrieveSql(int count)` override from `OracleEventPersistenter`
+    - Remove `getBaseRetrieveSql(int count)` override from `H2EventPersistenter`
+    - _Requirements: 2.1, 2.2_
+
+  - [x] 10.3 Update existing test LockingClausePriorityProperties
+    - In `LockingClausePriorityProperties.lockingClauseFollowsStrictPriority()`, update the SKIP LOCKED branch: remove the assertion `!sqlLower.contains("order by")` and add assertion `sqlLower.contains("order by")`
+    - In the same method, update the NOWAIT branch: remove the assertion `!sqlLower.contains("order by")` and add assertion `sqlLower.contains("order by")`
+    - Remove the `getBaseRetrieveSql(int count)` override from the inner `TestPersistenter` class
+    - _Requirements: 2.1, 2.2, 3.1, 3.2, 3.3_
+
+  - [x] 10.4 Update existing test BaseQueryNoLockingClauseProperties
+    - Remove the `baseRetrieveSqlContainsNoLockingClauses` test method (tests `getBaseRetrieveSql()` which no longer exists)
+    - Remove the `getBaseRetrieveSql(int count)` override from the inner `TestPersistenter` class
+    - Keep the `orderedBaseRetrieveSqlContainsNoLockingClauses` test method (still valid)
+    - _Requirements: 2.1, 2.2_
+
+  - [x] 10.5 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - All Locking Paths Use Ordered SQL
+    - **IMPORTANT**: Re-run the SAME test from task 8 - do NOT write a new test
+    - The test from task 8 encodes the expected behavior (ORDER BY present in all paths)
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 8
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - _Requirements: 2.1, 2.2_
+
+  - [x] 10.6 Verify preservation tests still pass
+    - **Property 2: Preservation** - Locking Clauses Unchanged After Fix
+    - **IMPORTANT**: Re-run the SAME tests from task 9 - do NOT write new tests
+    - Run preservation property tests from step 9
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions in locking clause behavior)
+    - Confirm all tests still pass after fix (no regressions)
+
+- [x] 11. Write property test for dead code removal verification
+  - **Property 35: Dead code removal — getBaseRetrieveSql() removed**
+  - Create test class `whistle/src/test/java/org/coderclan/whistle/DeadCodeRemovalProperties.java`
+  - Use reflection to verify that `getBaseRetrieveSql(int)` is NOT declared on `AbstractRdbmsEventPersistenter`, `MysqlEventPersistenter`, `PostgresqlEventPersistenter`, `OracleEventPersistenter`, or `H2EventPersistenter`
+  - Verify that `getOrderedBaseRetrieveSql(int)` IS still declared on `AbstractRdbmsEventPersistenter`
+  - _Requirements: 2.1, 2.2_
+
+- [x] 12. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

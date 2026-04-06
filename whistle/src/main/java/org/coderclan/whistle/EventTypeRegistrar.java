@@ -2,7 +2,6 @@ package org.coderclan.whistle;
 
 import net.jcip.annotations.ThreadSafe;
 import org.coderclan.whistle.api.EventConsumer;
-import org.coderclan.whistle.api.EventContent;
 import org.coderclan.whistle.api.EventType;
 import org.coderclan.whistle.exception.DuplicatedEventTypeException;
 import org.slf4j.Logger;
@@ -63,7 +62,10 @@ public class EventTypeRegistrar {
         return Collections.unmodifiableMap(tempMap);
     }
 
-    public EventType<? extends EventContent> findEventType(String type) {
+    // Wildcard return type is unavoidable: this registry stores heterogeneous EventType instances
+    // with different content type parameters, so no single concrete type parameter can replace <?>.
+    @SuppressWarnings("java:S1452")
+    public EventType<?> findEventType(String type) {
         if (Objects.isNull(eventTypeMap)) {
             return null;
         }

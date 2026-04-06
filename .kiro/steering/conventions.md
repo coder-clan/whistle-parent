@@ -21,3 +21,18 @@ When updating existing spec documents (requirements.md, design.md), follow the "
 Rationale: The task execution agent reads these documents to understand what to implement. A self-contained appended section is faster to locate and less error-prone than inline edits scattered across a large file. This also avoids context window issues with large documents.
 
 This rule does NOT apply to tasks.md — tasks are naturally sequential and should be appended as new items at the end.
+
+# Error Handling in Design Documents
+
+Every error handling section in a design document must specify the logging behavior for each error scenario. Include:
+
+- The log level (DEBUG, INFO, WARN, ERROR)
+- What information is logged (exception message, stack trace, context variables)
+
+Guideline for log levels:
+- DEBUG: Expected/recoverable situations (e.g., feature probe failures, optional feature not available)
+- INFO: Normal operational events (e.g., startup results, configuration applied)
+- WARN: Unexpected but non-fatal situations (e.g., connection failure during optional probe, missing resource)
+- ERROR: Failures that affect core functionality (e.g., event persistence failure, unrecoverable state)
+
+The implementation must match the logging specification in the design doc.

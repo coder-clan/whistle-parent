@@ -24,11 +24,14 @@ public interface EventConsumer<E extends EventContent> extends Consumer<E> {
      * @param message
      * @return true if consumed successfully.
      */
+    // Framework callback interface — intentionally declares throws Exception to allow implementors
+    // maximum flexibility, similar to java.util.concurrent.Callable. The accept() default method
+    // catches and wraps all exceptions.
+    @SuppressWarnings("java:S112")
     boolean consume(E message) throws Exception;
 
     default void accept(E content) {
         try {
-            // log.trace("Received event: {}", content);
             if (!this.consume(content)) {
                 throw new ConsumerException("Consume failed.");
             }

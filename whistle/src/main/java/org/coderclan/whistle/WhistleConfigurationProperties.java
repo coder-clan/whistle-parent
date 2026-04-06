@@ -13,10 +13,6 @@ public class WhistleConfigurationProperties {
 
     private String persistentTableName = "sys_event_out";
 
-    @Deprecated
-    @Value("${org.coderclan.whistle.table.producedEvent:}")
-    private String oldPersistentTableName;
-
     @Value("${spring.application.name}")
     private String defaultApplicationName;
 
@@ -43,13 +39,22 @@ public class WhistleConfigurationProperties {
         return applicationName;
     }
 
+    /**
+     * Query timeout in seconds for the event retrieval SELECT ... FOR UPDATE statement.
+     * Protects against deadlocks when SKIP LOCKED is not available.
+     * Default: 5 seconds.
+     */
+    private int retrieveTransactionTimeout = 5;
+
+    public int getRetrieveTransactionTimeout() {
+        return retrieveTransactionTimeout;
+    }
+
+    public void setRetrieveTransactionTimeout(int retrieveTransactionTimeout) {
+        this.retrieveTransactionTimeout = retrieveTransactionTimeout;
+    }
+
     public String getPersistentTableName() {
-
-        // Compatible for old version configuration property: org.coderclan.whistle.table.producedEvent
-        if (Objects.equals(this.persistentTableName, "sys_event_out") && !Objects.equals(oldPersistentTableName, "")) {
-            return oldPersistentTableName;
-        }
-
         return persistentTableName;
     }
 

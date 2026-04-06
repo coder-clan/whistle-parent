@@ -15,9 +15,9 @@ public class MongoProducerApplication {
         while (true) {
             try {
                 n.sendNotification();
-                Thread.sleep(10 * 1000);
+                Thread.sleep(10 * 1000L);
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
                 e.printStackTrace();
             }

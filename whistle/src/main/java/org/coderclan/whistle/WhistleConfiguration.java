@@ -44,16 +44,21 @@ import java.util.stream.Collectors;
 public class WhistleConfiguration implements ApplicationContextAware, InitializingBean {
     private static final Logger log = LoggerFactory.getLogger(WhistleConfiguration.class);
     private static final String CLOUD_STREAM_SUPPLIER = "cloudStreamSupplier";
-    @Autowired(required = false)
-    private List<EventConsumer<?>> consumers;
-    @Autowired(required = false)
-    List<Collection<? extends EventType<?>>> publishingEventType;
 
-    @Autowired
-    private WhistleConfigurationProperties properties;
-
+    private final List<EventConsumer<?>> consumers;
+    private final List<Collection<? extends EventType<?>>> publishingEventType;
+    private final WhistleConfigurationProperties properties;
 
     private ApplicationContext applicationContext;
+
+    public WhistleConfiguration(
+            @Autowired(required = false) List<EventConsumer<?>> consumers,
+            @Autowired(required = false) List<Collection<? extends EventType<?>>> publishingEventType,
+            @Autowired WhistleConfigurationProperties properties) {
+        this.consumers = consumers;
+        this.publishingEventType = publishingEventType;
+        this.properties = properties;
+    }
 
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
@@ -124,7 +129,7 @@ public class WhistleConfiguration implements ApplicationContextAware, Initializi
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar
     ) {
-        return new MysqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
+        return new MysqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName(), this.properties.getRetrieveTransactionTimeout());
     }
 
     @Bean("h2EventPersistenter")
@@ -136,7 +141,7 @@ public class WhistleConfiguration implements ApplicationContextAware, Initializi
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar
     ) {
-        return new H2EventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
+        return new H2EventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName(), this.properties.getRetrieveTransactionTimeout());
     }
 
     @Bean("postgresqlEventPersistenter")
@@ -148,7 +153,7 @@ public class WhistleConfiguration implements ApplicationContextAware, Initializi
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar
     ) {
-        return new PostgresqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
+        return new PostgresqlEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName(), this.properties.getRetrieveTransactionTimeout());
     }
 
     @Bean("oracleEventPersistenter")
@@ -159,20 +164,23 @@ public class WhistleConfiguration implements ApplicationContextAware, Initializi
             @Autowired DataSource dataSource,
             @Autowired EventContentSerializer serializer,
             @Autowired EventTypeRegistrar eventTypeRegistrar) {
-        return new OracleEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName());
+        return new OracleEventPersistenter(dataSource, serializer, eventTypeRegistrar, this.properties.getPersistentTableName(), this.properties.getRetrieveTransactionTimeout());
     }
 
     @Bean
     @ConditionalOnBean({EventPersistenter.class})
     @ConditionalOnMissingBean
     public FailedEventRetrier failedEventRetrier(@Autowired EventPersistenter persistenter, @Autowired EventSender eventSender) {
-        return new FailedEventRetrier(persistenter, eventSender);
+        return new FailedEventRetrier(persistenter, eventSender, this.properties);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public EventService eventService() {
-        return new EventServiceImpl();
+    public EventService eventService(
+            @Autowired(required = false) EventPersistenter eventPersistenter,
+            @Autowired TransactionalEventHandler transactionalEventHandler,
+            @Autowired EventSender eventSender) {
+        return new EventServiceImpl(eventPersistenter, transactionalEventHandler, eventSender);
     }
 
     @Bean
@@ -189,8 +197,8 @@ public class WhistleConfiguration implements ApplicationContextAware, Initializi
 
     @Bean
     @ConditionalOnMissingBean
-    ServiceActivators cloudStreamConfig() {
-        return new ServiceActivators();
+    ServiceActivators cloudStreamConfig(@Autowired(required = false) EventPersistenter persistenter) {
+        return new ServiceActivators(persistenter);
     }
 
     @Bean

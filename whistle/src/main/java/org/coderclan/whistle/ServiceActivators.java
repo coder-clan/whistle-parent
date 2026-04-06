@@ -14,8 +14,12 @@ import java.util.Objects;
  */
 public class ServiceActivators {
     private static final Logger log = LoggerFactory.getLogger(ServiceActivators.class);
-    @Autowired(required = false)
-    private EventPersistenter persistenter;
+
+    private final EventPersistenter persistenter;
+
+    public ServiceActivators(@Autowired(required = false) EventPersistenter persistenter) {
+        this.persistenter = persistenter;
+    }
 
 
     /**

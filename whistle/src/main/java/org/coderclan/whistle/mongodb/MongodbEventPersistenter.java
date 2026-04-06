@@ -1,6 +1,5 @@
 package org.coderclan.whistle.mongodb;
 
-import com.mongodb.client.result.UpdateResult;
 import org.coderclan.whistle.Constants;
 import org.coderclan.whistle.Event;
 import org.coderclan.whistle.EventPersistenter;
@@ -22,8 +21,11 @@ import java.util.stream.Collectors;
 
 public class MongodbEventPersistenter implements EventPersistenter {
 
-    @Autowired
-    private MongoTemplate template;
+    private final MongoTemplate template;
+
+    public MongodbEventPersistenter(@Autowired MongoTemplate template) {
+        this.template = template;
+    }
 
     @Override
     public <C extends EventContent> String persistEvent(EventType<C> type, C content) {
@@ -33,17 +35,19 @@ public class MongodbEventPersistenter implements EventPersistenter {
 
     @Override
     public void confirmEvent(String persistentEventId) {
-        UpdateResult ret = template.update(MongoEvent.class)
+        template.update(MongoEvent.class)
                 .matching(Query.query(Criteria.where("id").is(persistentEventId)))
                 .apply(Update.update("confirmed", true)).first();
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public List<Event<?>> retrieveUnconfirmedEvent() {
         Query query = Query.query(Criteria.where("confirmed").is(false))
-                // Order by retry asc, id asc
-                // to ensure that events with lower retry counts are processed first,
-                .with(Sort.by(Sort.Direction.ASC, "retry","id"))
+                // Order by retry asc, id desc
+                // Retry ASC: events with lower retry counts are processed first (poison events sink down).
+                // ID DESC: among events with the same retry count, newer events are processed first.
+                .with(Sort.by(Sort.Direction.ASC, "retry").and(Sort.by(Sort.Direction.DESC, "id")))
                 .limit(Constants.RETRY_BATCH_COUNT);
         List<MongoEvent<EventContent>> r = (List<MongoEvent<EventContent>>) (List<?>) template.find(query, MongoEvent.class);
 

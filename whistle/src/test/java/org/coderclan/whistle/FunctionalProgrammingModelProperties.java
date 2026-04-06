@@ -34,11 +34,10 @@ class FunctionalProgrammingModelProperties {
     @Tag("Feature: whistle-event-system, Property 32: Functional programming model for Spring Cloud Stream")
     void sourceFileDoesNotContainForbiddenReferences(@ForAll("javaSourceFiles") Path sourceFile) throws IOException {
         String content = new String(Files.readAllBytes(sourceFile));
-        String relativePath = SOURCE_ROOT.relativize(sourceFile).toString();
 
         for (String forbidden : FORBIDDEN_REFERENCES) {
             assert !content.contains(forbidden) :
-                    "Source file '" + relativePath + "' contains forbidden reference '" + forbidden +
+                    "Source file '" + sourceFile + "' contains forbidden reference '" + forbidden +
                     "'. Whistle must use the functional programming model and not reference " +
                     "@EnableBinding, @StreamListener, or RabbitAutoConfiguration.";
         }

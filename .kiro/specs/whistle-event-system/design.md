@@ -885,3 +885,279 @@ Define three Maven profiles in the root `pom.xml` that override the Spring Boot 
 - Switching profiles requires IDEA to re-resolve dependencies (takes a few seconds)
 - The root POM `<parent>` still points to Spring Boot 2.6.4; the profile overrides via BOM import
 - Example projects must not use version-specific APIs (javax vs jakarta) — currently they don't
+
+
+---
+
+## Addendum: Unified Retry Ordering Strategy
+
+> This section documents the design rationale for the unified `ORDER BY retried_count ASC, id DESC` ordering across all persistenter implementations (RDBMS and MongoDB).
+> After all implementation tasks are complete, this section will be consolidated into the main design document.
+
+### Problem
+
+The RDBMS and MongoDB persistenters used different ordering strategies for retrieving unconfirmed events:
+
+- **RDBMS (fallback without SKIP LOCKED)**: `ORDER BY update_time ASC, id ASC` — relied on `update_time` as an implicit proxy for retry count, since `update_time` advances each time `retried_count` is incremented.
+- **MongoDB**: `ORDER BY retry ASC, id ASC` — explicitly ordered by retry count.
+
+While both achieved a similar effect (frequently-retried events sink down), the inconsistency made the system harder to reason about, and the RDBMS approach had a subtle coupling to the `update_time` auto-update behavior (MySQL `ON UPDATE CURRENT_TIMESTAMP`, PostgreSQL/Oracle triggers).
+
+### Design Decision: `ORDER BY retried_count ASC, id DESC`
+
+All persistenter implementations now use a consistent ordering:
+
+1. **`retried_count ASC` (RDBMS) / `retry ASC` (MongoDB)**: Events with fewer retries are processed first. This acts as a natural backoff mechanism — "poison" events that repeatedly fail accumulate a high retry count and gradually sink to the bottom of the queue, allowing healthy events to be processed first.
+
+2. **`id DESC`**: Among events with the same retry count, newer events are processed first. This prioritizes recent events that are most likely to succeed (e.g., events created after a transient broker outage is resolved), while older events at the same retry level are deferred.
+
+### Failure Mode Analysis
+
+| Failure Scenario | Behavior with `retried_count ASC, id DESC` |
+|---|---|
+| Broker down (RabbitMQ/Kafka unavailable) | All events fail equally regardless of order. Once the broker recovers, all unconfirmed events are retried. Order is irrelevant. |
+| Missing exchange/topic | All events of that type fail equally. Order is irrelevant. |
+| Buggy event (poison message) | The poison event's retry count increments each cycle, causing it to sink below newer healthy events. This prevents a single poison event from blocking the entire retry queue. |
+
+### MongoDB Index Change
+
+The `MongoEvent` document's index was updated from a simple partial index on `confirmed` to a compound partial index that covers the new sort order:
+
+**Before:**
+```java
+@Indexed(partialFilter = "{confirmed:false}")
+private Boolean confirmed = false;
+```
+
+**After:**
+```java
+@CompoundIndex(
+    name = "unconfirmed_retry_order",
+    def = "{'retry': 1, '_id': -1}",
+    partialFilter = "{'confirmed': false}"
+)
+```
+
+This compound index allows MongoDB to satisfy the `WHERE confirmed = false ORDER BY retry ASC, _id DESC LIMIT 32` query entirely from the index, avoiding in-memory sorts. The partial filter keeps the index small by only including unconfirmed documents.
+
+The `retry` field is part of this index and gets updated on each retry cycle. This causes index key repositioning (delete old key + insert new key), but the overhead is negligible given the small batch size (32) and the partial index scope.
+
+### RDBMS Impact
+
+For RDBMS persistenters, the ordering change only affects the `getOrderedBaseRetrieveSql()` method, which is the fallback path used when neither `SKIP LOCKED` nor `NOWAIT` is supported. When `SKIP LOCKED` is available, the `getBaseRetrieveSql()` (unordered) path is used instead, and the database handles concurrency via lock skipping.
+
+No schema changes are needed for RDBMS — the `retried_count` and `id` columns already exist. For optimal performance on the fallback path, a composite index on `(retried_count, id DESC)` filtered by `success = false` could be added, but this is optional since the fallback path is only used on older database versions.
+
+### Error Handling and Logging
+
+No changes to error handling or logging behavior. The ordering change is purely a query-level optimization that does not affect exception handling, log levels, or recovery patterns.
+
+### Updated Correctness Properties
+
+**Property 12 (updated)**: SKIP LOCKED SQL generation matches database capability
+
+*For any* database that does not support SKIP LOCKED or NOWAIT, the `AbstractRdbmsEventPersistenter` SHALL generate a retrieve SQL containing `ORDER BY retried_count ASC, id DESC` with `FOR UPDATE`, ensuring poison events sink down and newer events within the same retry count are prioritized.
+
+**Property 15 (updated)**: MongoDB retrieve returns ordered bounded batch with incremented retry
+
+*For any* set of unconfirmed MongoEvent documents, `retrieveUnconfirmedEvent()` SHALL return at most 32 documents ordered by retry ascending then ID descending, and SHALL increment the retry counter for all retrieved documents.
+
+---
+
+## Addendum: Bugfix — Retrieve SQL Missing ORDER BY for SKIP LOCKED and NOWAIT Paths
+
+> This section covers the bugfix design for the missing `ORDER BY` clause in the SKIP LOCKED and NOWAIT code paths of `AbstractRdbmsEventPersistenter.buildRetrieveSql()`.
+> After all implementation tasks are complete, this section will be consolidated into the main design document.
+
+### Overview
+
+In `AbstractRdbmsEventPersistenter.buildRetrieveSql()`, the SKIP LOCKED and NOWAIT paths call `getBaseRetrieveSql(count)` which returns SQL without any `ORDER BY` clause. Only the fallback path (plain `FOR UPDATE`) calls `getOrderedBaseRetrieveSql(count)` which includes `ORDER BY retried_count ASC, id DESC`. This means on databases that support SKIP LOCKED or NOWAIT, poison events with high retry counts are retrieved with equal priority to fresh events, potentially blocking normal event processing.
+
+The fix is to change all three paths to use `getOrderedBaseRetrieveSql(count)`, making `getBaseRetrieveSql()` dead code that can be removed.
+
+### Glossary
+
+- **Bug_Condition (C)**: The condition that triggers the bug — when `supportsSkipLocked = true` OR `supportsNowait = true`, causing `buildRetrieveSql()` to use the unordered `getBaseRetrieveSql()` instead of the ordered `getOrderedBaseRetrieveSql()`.
+- **Property (P)**: The desired behavior — all three locking paths produce SQL containing `ORDER BY retried_count ASC, id DESC`.
+- **Preservation**: The locking clause suffixes (`FOR UPDATE SKIP LOCKED`, `FOR UPDATE NOWAIT`, `FOR UPDATE`) and the batch size / retry count increment logic must remain unchanged.
+- **buildRetrieveSql()**: The private method in `AbstractRdbmsEventPersistenter` that constructs the full retrieve SQL by combining a base query with a locking clause.
+- **getBaseRetrieveSql()**: The abstract method returning a SELECT query without `ORDER BY` (the bug source).
+- **getOrderedBaseRetrieveSql()**: The abstract method returning a SELECT query with `ORDER BY retried_count ASC, id DESC`.
+
+### Bug Details
+
+#### Bug Condition
+
+The bug manifests when the database supports SKIP LOCKED or NOWAIT. In these paths, `buildRetrieveSql()` calls `getBaseRetrieveSql(count)` which produces SQL without deterministic ordering, causing poison events (high `retried_count`) to be retrieved with equal priority to fresh events.
+
+**Formal Specification:**
+```
+FUNCTION isBugCondition(input)
+  INPUT: input of type { supportsSkipLocked: boolean, supportsNowait: boolean }
+  OUTPUT: boolean
+
+  RETURN input.supportsSkipLocked = true OR input.supportsNowait = true
+END FUNCTION
+```
+
+#### Examples
+
+- **SKIP LOCKED path (bug)**: `supportsSkipLocked=true` → produces `SELECT ... WHERE success=false LIMIT 32 for update skip locked` (no ORDER BY). Expected: `SELECT ... WHERE success=false ORDER BY retried_count ASC, id DESC LIMIT 32 for update skip locked`.
+- **NOWAIT path (bug)**: `supportsSkipLocked=false, supportsNowait=true` → produces `SELECT ... WHERE success=false LIMIT 32 for update nowait` (no ORDER BY). Expected: `SELECT ... WHERE success=false ORDER BY retried_count ASC, id DESC LIMIT 32 for update nowait`.
+- **Fallback path (correct)**: `supportsSkipLocked=false, supportsNowait=false` → produces `SELECT ... WHERE success=false ORDER BY retried_count ASC, id DESC LIMIT 32 for update` (has ORDER BY). This path is already correct.
+
+### Expected Behavior
+
+#### Preservation Requirements
+
+**Unchanged Behaviors:**
+- The locking clause suffix for each path must remain: `for update skip locked`, `for update nowait`, or `for update`.
+- The batch size limit (32 events) and retry count increment logic in `retrieveUnconfirmedEvent()` must remain unchanged.
+- The `WHERE` clause filtering (success=false, update_time older than 10 seconds) must remain unchanged.
+- Mouse/API interactions with `persistEvent()` and `confirmEvent()` must remain unchanged.
+
+**Scope:**
+The fix only changes which base SQL method is called inside `buildRetrieveSql()`. All inputs that do NOT involve the `buildRetrieveSql()` method are completely unaffected. The locking clause appended after the base SQL is unchanged for all three paths.
+
+### Hypothesized Root Cause
+
+Based on the code analysis, the root cause is straightforward:
+
+1. **Incorrect method call in SKIP LOCKED and NOWAIT paths**: `buildRetrieveSql()` calls `getBaseRetrieveSql(count)` for the SKIP LOCKED and NOWAIT branches, but should call `getOrderedBaseRetrieveSql(count)`. This was likely an oversight from the original implementation where ordering was only considered necessary for the fallback path.
+
+2. **No other contributing factors**: The `getBaseRetrieveSql()` and `getOrderedBaseRetrieveSql()` methods themselves are correctly implemented in all four subclasses. The only issue is which method is called.
+
+### Correctness Properties
+
+#### Property 33: Bug Condition — All locking paths use ordered SQL
+
+_For any_ combination of `(supportsSkipLocked, supportsNowait)` and any positive count value, the fixed `buildRetrieveSql()` method SHALL produce SQL containing `ORDER BY retried_count ASC, id DESC`, regardless of which locking strategy is selected. This ensures poison events with high retry counts are deprioritized across all database locking modes.
+
+**Validates: Requirements 2.1, 2.2, 2.3**
+
+#### Property 34: Preservation — Locking clauses unchanged after fix
+
+_For any_ combination of `(supportsSkipLocked, supportsNowait)` and any positive count value, the fixed `buildRetrieveSql()` method SHALL produce SQL with the same locking clause suffix as the original: `for update skip locked` when `supportsSkipLocked=true`, `for update nowait` when `supportsNowait=true` and `supportsSkipLocked=false`, and `for update` otherwise.
+
+**Validates: Requirements 3.1, 3.2, 3.3**
+
+#### Property 35: Dead code removal — getBaseRetrieveSql() removed
+
+_For any_ subclass of `AbstractRdbmsEventPersistenter` (MysqlEventPersistenter, PostgresqlEventPersistenter, OracleEventPersistenter, H2EventPersistenter), the class SHALL NOT declare a `getBaseRetrieveSql(int)` method, and `AbstractRdbmsEventPersistenter` itself SHALL NOT declare an abstract `getBaseRetrieveSql(int)` method, confirming the dead code has been removed.
+
+**Validates: Requirements 2.1, 2.2 (dead code cleanup)**
+
+### Fix Implementation
+
+#### Changes Required
+
+Assuming our root cause analysis is correct:
+
+**File**: `whistle/src/main/java/org/coderclan/whistle/rdbms/AbstractRdbmsEventPersistenter.java`
+
+**Function**: `buildRetrieveSql(int count)`
+
+**Specific Changes**:
+
+1. **Replace `getBaseRetrieveSql` with `getOrderedBaseRetrieveSql` in SKIP LOCKED path**: Change `getBaseRetrieveSql(count) + " for update skip locked"` to `getOrderedBaseRetrieveSql(count) + " for update skip locked"`.
+
+2. **Replace `getBaseRetrieveSql` with `getOrderedBaseRetrieveSql` in NOWAIT path**: Change `getBaseRetrieveSql(count) + " for update nowait"` to `getOrderedBaseRetrieveSql(count) + " for update nowait"`.
+
+3. **Remove `getBaseRetrieveSql()` abstract method declaration** from `AbstractRdbmsEventPersistenter` (lines with the abstract method and its Javadoc).
+
+4. **Remove `getBaseRetrieveSql()` override** from `MysqlEventPersistenter`.
+
+5. **Remove `getBaseRetrieveSql()` override** from `PostgresqlEventPersistenter`.
+
+6. **Remove `getBaseRetrieveSql()` override** from `OracleEventPersistenter`.
+
+7. **Remove `getBaseRetrieveSql()` override** from `H2EventPersistenter`.
+
+8. **Update existing test `LockingClausePriorityProperties`**: The existing Property 2 test asserts that SKIP LOCKED and NOWAIT paths do NOT contain `ORDER BY`. After the fix, all paths will contain `ORDER BY`. The test assertions for the SKIP LOCKED and NOWAIT branches must be updated to expect `ORDER BY` instead of asserting its absence. The `TestPersistenter` inner class can also remove its `getBaseRetrieveSql()` override.
+
+9. **Update existing test `BaseQueryNoLockingClauseProperties`**: The `TestPersistenter` inner class must remove its `getBaseRetrieveSql()` override, and the `baseRetrieveSqlContainsNoLockingClauses` test method must be removed since `getBaseRetrieveSql()` no longer exists.
+
+### Testing Strategy
+
+#### Validation Approach
+
+The testing strategy follows a two-phase approach: first, surface counterexamples that demonstrate the bug on unfixed code, then verify the fix works correctly and preserves existing behavior.
+
+#### Exploratory Bug Condition Checking
+
+**Goal**: Surface counterexamples that demonstrate the bug BEFORE implementing the fix. Confirm or refute the root cause analysis. If we refute, we will need to re-hypothesize.
+
+**Test Plan**: Write a property test that invokes `buildRetrieveSql()` via reflection with `supportsSkipLocked=true` or `supportsNowait=true`, and asserts the resulting SQL contains `ORDER BY`. Run this test on the UNFIXED code to observe failures.
+
+**Test Cases**:
+1. **SKIP LOCKED ordering test**: Set `supportsSkipLocked=true`, invoke `buildRetrieveSql()`, assert SQL contains `order by retried_count asc, id desc` (will fail on unfixed code)
+2. **NOWAIT ordering test**: Set `supportsSkipLocked=false, supportsNowait=true`, invoke `buildRetrieveSql()`, assert SQL contains `order by retried_count asc, id desc` (will fail on unfixed code)
+3. **Fallback ordering test**: Set both to false, invoke `buildRetrieveSql()`, assert SQL contains `order by` (will pass on unfixed code — this path is already correct)
+
+**Expected Counterexamples**:
+- SKIP LOCKED and NOWAIT paths produce SQL without `ORDER BY`
+- Root cause confirmed: `getBaseRetrieveSql()` is called instead of `getOrderedBaseRetrieveSql()`
+
+#### Fix Checking
+
+**Goal**: Verify that for all inputs where the bug condition holds, the fixed function produces the expected behavior.
+
+**Pseudocode:**
+```
+FOR ALL input WHERE isBugCondition(input) DO
+  result := buildRetrieveSql_fixed(input.count)
+  ASSERT result CONTAINS "order by retried_count asc, id desc"
+END FOR
+```
+
+#### Preservation Checking
+
+**Goal**: Verify that for all inputs where the bug condition does NOT hold, the fixed function produces the same result as the original function.
+
+**Pseudocode:**
+```
+FOR ALL input WHERE NOT isBugCondition(input) DO
+  ASSERT buildRetrieveSql_original(input) = buildRetrieveSql_fixed(input)
+END FOR
+
+FOR ALL input DO
+  IF input.supportsSkipLocked THEN
+    ASSERT buildRetrieveSql_fixed(input) ENDS WITH "for update skip locked"
+  ELSE IF input.supportsNowait THEN
+    ASSERT buildRetrieveSql_fixed(input) ENDS WITH "for update nowait"
+  ELSE
+    ASSERT buildRetrieveSql_fixed(input) ENDS WITH "for update"
+  END IF
+END FOR
+```
+
+**Testing Approach**: Property-based testing is recommended for preservation checking because:
+- It generates many `(supportsSkipLocked, supportsNowait, count)` combinations automatically
+- It catches edge cases that manual unit tests might miss
+- It provides strong guarantees that locking clause behavior is unchanged
+
+**Test Plan**: The existing `LockingClausePriorityProperties` test already covers locking clause priority. After updating its assertions to expect `ORDER BY` in all paths, it serves as both fix checking and preservation checking.
+
+**Test Cases**:
+1. **Locking clause preservation**: Verify SKIP LOCKED path still ends with `for update skip locked`, NOWAIT path with `for update nowait`, fallback with `for update`
+2. **ORDER BY presence in all paths**: Verify all three paths contain `order by retried_count asc, id desc`
+3. **Fallback path unchanged**: Verify the fallback path produces identical SQL before and after the fix
+
+#### Unit Tests
+
+- Verify `getBaseRetrieveSql()` method no longer exists on `AbstractRdbmsEventPersistenter` and all four subclasses (dead code removal)
+- Verify `getOrderedBaseRetrieveSql()` still exists and returns SQL with ORDER BY
+
+#### Property-Based Tests
+
+- Property 33: Generate random `(supportsSkipLocked, supportsNowait, count)` combinations and verify all paths produce SQL with `ORDER BY retried_count ASC, id DESC`
+- Property 34: Generate random combinations and verify locking clause suffixes are preserved
+- Property 35: Use reflection to verify `getBaseRetrieveSql(int)` is not declared on any persistenter class
+
+#### Integration Tests
+
+- No integration tests needed — the fix is a pure SQL generation change with no runtime behavior changes beyond query ordering
+
+### Error Handling and Logging
+
+No changes to error handling or logging behavior. The fix only changes which base SQL method is called inside `buildRetrieveSql()`. All existing error handling in `retrieveUnconfirmedEvent()` (SQLException catch, autoCommit restoration, empty list return) remains unchanged. Log levels and log messages are unaffected.

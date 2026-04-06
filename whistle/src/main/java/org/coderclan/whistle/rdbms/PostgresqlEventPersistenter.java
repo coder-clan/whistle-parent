@@ -14,8 +14,8 @@ import java.sql.SQLException;
  */
 @ThreadSafe
 public class PostgresqlEventPersistenter extends AbstractRdbmsEventPersistenter {
-    public PostgresqlEventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName) {
-        super(dataSource, serializer, eventTypeRegistrar, tableName);
+    public PostgresqlEventPersistenter(DataSource dataSource, EventContentSerializer serializer, EventTypeRegistrar eventTypeRegistrar, String tableName, int retrieveTransactionTimeout) {
+        super(dataSource, serializer, eventTypeRegistrar, tableName, retrieveTransactionTimeout);
     }
 
     protected String getConfirmSql() {
@@ -43,15 +43,11 @@ public class PostgresqlEventPersistenter extends AbstractRdbmsEventPersistenter 
         };
     }
 
-    protected String getRetrieveSql(int count, boolean skipLockedSupported) {
-        String base = "select id,event_type,event_content,retried_count from " + tableName + " where success=false and update_time<current_timestamp - INTERVAL '10' second ";
-        if (skipLockedSupported) {
-            // When supported, use SKIP LOCKED to avoid waiting on locked rows
-            return base + "limit " + count + " for update skip locked";
-        } else {
-            // When SKIP LOCKED not supported, add deterministic ordering to reduce deadlock risk
-            return base + "order by update_time, id limit " + count + " for update";
-        }
+    @Override
+    protected String getOrderedBaseRetrieveSql(int count) {
+        return "select id,event_type,event_content,retried_count from " + tableName
+                + " where success=false and update_time<current_timestamp - INTERVAL '10' second "
+                + "order by retried_count asc, id desc limit " + count;
     }
 
 

@@ -22,8 +22,8 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 @AutoConfigureBefore(name = "org.coderclan.whistle.WhistleConfiguration")
+@SuppressWarnings("java:S1118") // It is not a util class
 public class WhistleJacksonConfiguration {
-
     @Configuration
     @ConditionalOnClass(name = "com.fasterxml.jackson.databind.ObjectMapper")
     static class Jackson2Configuration {

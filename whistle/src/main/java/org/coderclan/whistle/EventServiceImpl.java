@@ -17,13 +17,18 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class EventServiceImpl implements EventService {
     private static final Logger log = LoggerFactory.getLogger(EventServiceImpl.class);
 
+    private final EventPersistenter eventPersistenter;
+    private final TransactionalEventHandler transactionalEventHandler;
+    private final EventSender eventSender;
 
-    @Autowired(required = false)
-    private EventPersistenter eventPersistenter;
-    @Autowired
-    private TransactionalEventHandler transactionalEventHandler;
-    @Autowired
-    private EventSender eventSender;
+    public EventServiceImpl(
+            @Autowired(required = false) EventPersistenter eventPersistenter,
+            @Autowired TransactionalEventHandler transactionalEventHandler,
+            @Autowired EventSender eventSender) {
+        this.eventPersistenter = eventPersistenter;
+        this.transactionalEventHandler = transactionalEventHandler;
+        this.eventSender = eventSender;
+    }
 
     @Override
     public <C extends EventContent> void publishEvent(EventType<C> type, C content) {

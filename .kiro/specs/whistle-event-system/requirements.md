@@ -61,7 +61,7 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 2. WHEN an event delivery is confirmed, THE RDBMS_Event_Persistenter SHALL update the corresponding row in the Persistent_Event_Table to mark the event as successfully delivered.
 3. WHEN unconfirmed events are retrieved for retry, THE RDBMS_Event_Persistenter SHALL select events from the Persistent_Event_Table that are not marked as successful and whose update time is older than 10 seconds, increment the retry count for each retrieved event, and return a batch of up to 32 events.
 4. WHEN the database supports SKIP LOCKED (MySQL 8.0+, PostgreSQL 9.5+, Oracle 9.0+, MariaDB 10.3+, H2 1.5+), THE RDBMS_Event_Persistenter SHALL use `FOR UPDATE SKIP LOCKED` in the retrieval query to avoid blocking on locked rows.
-5. WHEN the database does not support SKIP LOCKED, THE RDBMS_Event_Persistenter SHALL use `FOR UPDATE` with deterministic ordering by update time and ID to reduce deadlock risk.
+5. WHEN the database does not support SKIP LOCKED, THE RDBMS_Event_Persistenter SHALL use `FOR UPDATE` with deterministic ordering by retried_count ascending and ID descending (`ORDER BY retried_count ASC, id DESC`) to deprioritize repeatedly-failing events and reduce deadlock risk.
 6. THE RDBMS_Event_Persistenter SHALL automatically create the Persistent_Event_Table at startup if the table does not exist.
 7. THE Event_Persistenter SHALL use the database connection managed by Spring's DataSourceUtils to participate in the current transaction.
 
@@ -73,8 +73,8 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 
 1. WHEN an event is persisted, THE MongoDB_Event_Persistenter SHALL insert a MongoEvent document into the `sys_event_out` collection containing the event type, event content, a `confirmed` field set to false, and a `retry` field set to 0, and return the generated document ID.
 2. WHEN an event delivery is confirmed, THE MongoDB_Event_Persistenter SHALL update the corresponding MongoEvent document to set the `confirmed` field to true.
-3. WHEN unconfirmed events are retrieved for retry, THE MongoDB_Event_Persistenter SHALL query for documents where `confirmed` is false, ordered by retry count ascending then ID ascending, limited to 32 documents, and increment the retry counter for all retrieved documents.
-4. THE MongoDB_Event_Persistenter SHALL use a partial index on the `confirmed` field (filtering for `confirmed:false`) to optimize retrieval of unconfirmed events.
+3. WHEN unconfirmed events are retrieved for retry, THE MongoDB_Event_Persistenter SHALL query for documents where `confirmed` is false, ordered by retry count ascending then ID descending, limited to 32 documents, and increment the retry counter for all retrieved documents.
+4. THE MongoDB_Event_Persistenter SHALL use a compound partial index on `retry` ascending and `_id` descending (filtered for `confirmed:false`) to optimize retrieval of unconfirmed events with the correct sort order.
 
 ### Requirement 5: Database Auto-Configuration
 
@@ -275,3 +275,82 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 2. THE Whistle library SHALL use the functional programming model (`Supplier<Flux<Message>>` and `Consumer<Message>`) for Spring Cloud Stream integration, which is compatible with Spring Cloud Stream 4.x and 5.0.
 3. WHEN running on Spring Boot 4.x with Spring Cloud 2025.1.0, THE Whistle library SHALL function correctly with the Spring Cloud Stream RabbitMQ and Kafka binders without referencing any removed or relocated binder classes.
 4. THE Whistle library SHALL NOT directly reference `org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration`, because this class has been relocated to `org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration` in Spring Boot 4.
+
+
+---
+
+## Addendum: Bugfix — Retrieve SQL Missing ORDER BY for SKIP LOCKED and NOWAIT Paths
+
+### Introduction
+
+In `AbstractRdbmsEventPersistenter.buildRetrieveSql()`, the `ORDER BY retried_count ASC, id DESC` clause is only applied when the database does not support SKIP LOCKED or NOWAIT (the plain `FOR UPDATE` fallback path). The SKIP LOCKED and NOWAIT paths call `getBaseRetrieveSql()` which returns SQL without any ordering. This means on databases that support SKIP LOCKED (MySQL 8.0+, PostgreSQL 9.5+, Oracle 9.0+, H2 1.5+) or NOWAIT, poison events with high retry counts are retrieved with equal priority to fresh events, potentially blocking normal event processing.
+
+### Bug Analysis
+
+#### Current Behavior (Defect)
+
+1.1 WHEN the database supports SKIP LOCKED, THEN the system generates a retrieve SQL using `getBaseRetrieveSql()` which contains NO `ORDER BY` clause, causing events with high `retried_count` (poison events) to be retrieved with equal priority to fresh events.
+
+1.2 WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system generates a retrieve SQL using `getBaseRetrieveSql()` which contains NO `ORDER BY` clause, causing events with high `retried_count` (poison events) to be retrieved with equal priority to fresh events.
+
+#### Expected Behavior (Correct)
+
+2.1 WHEN the database supports SKIP LOCKED, THEN the system SHALL generate a retrieve SQL using `getOrderedBaseRetrieveSql()` which includes `ORDER BY retried_count ASC, id DESC`, so that fresh events (low retry count) are prioritized over poison events (high retry count).
+
+2.2 WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system SHALL generate a retrieve SQL using `getOrderedBaseRetrieveSql()` which includes `ORDER BY retried_count ASC, id DESC`, so that fresh events (low retry count) are prioritized over poison events (high retry count).
+
+2.3 WHEN the database supports neither SKIP LOCKED nor NOWAIT, THEN the system SHALL CONTINUE TO generate a retrieve SQL using `getOrderedBaseRetrieveSql()` with `ORDER BY retried_count ASC, id DESC` and append `FOR UPDATE`.
+
+#### Unchanged Behavior (Regression Prevention)
+
+3.1 WHEN the database supports SKIP LOCKED, THEN the system SHALL CONTINUE TO append `FOR UPDATE SKIP LOCKED` to the retrieve SQL.
+
+3.2 WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system SHALL CONTINUE TO append `FOR UPDATE NOWAIT` to the retrieve SQL.
+
+3.3 WHEN the database supports neither SKIP LOCKED nor NOWAIT, THEN the system SHALL CONTINUE TO append `FOR UPDATE` to the retrieve SQL.
+
+3.4 WHEN unconfirmed events are retrieved for retry, THEN the system SHALL CONTINUE TO return a batch of up to 32 events with incremented retry counts.
+
+### Bug Condition
+
+```pascal
+FUNCTION isBugCondition(X)
+  INPUT: X of type LockingStrategy
+  OUTPUT: boolean
+
+  // Returns true when the database supports SKIP LOCKED or NOWAIT,
+  // i.e., the paths that currently use unordered getBaseRetrieveSql()
+  RETURN X.supportsSkipLocked = true OR X.supportsNowait = true
+END FUNCTION
+```
+
+### Property Specification
+
+```pascal
+// Property: Fix Checking — All locking paths use ordered SQL
+FOR ALL X WHERE isBugCondition(X) DO
+  retrieveSql ← buildRetrieveSql'(RETRY_BATCH_COUNT)
+  ASSERT retrieveSql CONTAINS "ORDER BY retried_count ASC, id DESC"
+END FOR
+```
+
+### Preservation Goal
+
+```pascal
+// Property: Preservation Checking — Non-buggy path unchanged
+FOR ALL X WHERE NOT isBugCondition(X) DO
+  ASSERT buildRetrieveSql(X) = buildRetrieveSql'(X)
+  // Both use getOrderedBaseRetrieveSql() + " for update"
+END FOR
+
+// Property: Preservation Checking — Locking clauses unchanged
+FOR ALL X DO
+  IF X.supportsSkipLocked THEN
+    ASSERT buildRetrieveSql'(X) ENDS WITH "for update skip locked"
+  ELSE IF X.supportsNowait THEN
+    ASSERT buildRetrieveSql'(X) ENDS WITH "for update nowait"
+  ELSE
+    ASSERT buildRetrieveSql'(X) ENDS WITH "for update"
+  END IF
+END FOR
+```
