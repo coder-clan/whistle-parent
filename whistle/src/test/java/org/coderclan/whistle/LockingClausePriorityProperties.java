@@ -109,7 +109,7 @@ class LockingClausePriorityProperties {
     }
 
     @Property
-    @Tag("Feature: probe-lock-feature-detection, Property 2: Locking clause priority selection")
+    @Tag("Feature: whistle-event-system, Property 37: Locking clause priority selection")
     void lockingClauseFollowsStrictPriority(
             @ForAll boolean supportsSkipLocked,
             @ForAll boolean supportsNowait,
@@ -157,7 +157,7 @@ class LockingClausePriorityProperties {
      * always contains the substring "FOR UPDATE" (case-insensitive).
      */
     @Property
-    @Tag("Feature: probe-lock-feature-detection, Property 3: Retrieve SQL always contains FOR UPDATE")
+    @Tag("Feature: whistle-event-system, Property 38: Retrieve SQL always contains FOR UPDATE")
     void retrieveSqlAlwaysContainsForUpdate(
             @ForAll boolean supportsSkipLocked,
             @ForAll boolean supportsNowait,

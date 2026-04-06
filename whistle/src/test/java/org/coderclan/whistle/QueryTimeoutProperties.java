@@ -94,7 +94,7 @@ class QueryTimeoutProperties {
      * Statement.setQueryTimeout before query execution.
      */
     @Property
-    @Tag("Feature: probe-lock-feature-detection, Property 5: Query timeout is always applied")
+    @Tag("Feature: whistle-event-system, Property 40: Query timeout is always applied")
     void queryTimeoutIsAlwaysStored(@ForAll("positiveTimeouts") int timeout) throws Exception {
         DataSource ds = createDataSource();
         TestPersistenter persistenter = new TestPersistenter(ds, timeout);

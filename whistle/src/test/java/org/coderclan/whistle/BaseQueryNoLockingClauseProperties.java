@@ -93,7 +93,7 @@ class BaseQueryNoLockingClauseProperties {
      * FOR UPDATE, SKIP LOCKED, or NOWAIT.
      */
     @Property
-    @Tag("Feature: probe-lock-feature-detection, Property 4: Base queries contain no locking clauses")
+    @Tag("Feature: whistle-event-system, Property 39: Ordered base queries contain no locking clauses")
     void orderedBaseRetrieveSqlContainsNoLockingClauses(
             @ForAll("positiveCounts") int count
     ) throws Exception {

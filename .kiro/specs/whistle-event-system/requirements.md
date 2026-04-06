@@ -24,6 +24,10 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 - **Application_Name**: A globally unique identifier for a service, used as the consumer group name in Spring Cloud Stream.
 - **Jackson_2**: The Jackson JSON library version 2.x with package prefix `com.fasterxml.jackson`, used by Spring Boot 2.x and 3.x.
 - **Jackson_3**: The Jackson JSON library version 3.x with package prefix `tools.jackson`, used by Spring Boot 4.x as the default JSON library.
+- **LockFeatureProbe**: A utility class that probes the database at startup by executing `SELECT * FROM <table> WHERE 1=0 FOR UPDATE <clause>` to test whether a specific locking clause is supported. Uses a separate connection, always rolls back, and is side-effect-free.
+- **Locking_Clause**: One of `SKIP LOCKED`, `NOWAIT`, or plain `FOR UPDATE`, appended to the retrieve SQL by the base class based on probe results.
+- **Ordered_Base_Query**: The database-specific SELECT/WHERE/ORDER BY/LIMIT portion of the retrieve SQL (returned by `getOrderedBaseRetrieveSql()`), without any locking clause. The base class appends the selected Locking_Clause.
+- **Retrieve_SQL**: The final pre-built SQL string combining Ordered_Base_Query with the selected Locking_Clause. Built once during construction and reused for all subsequent retrievals.
 
 ## Requirements
 
@@ -65,6 +69,9 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 6. WHEN the database does not support SKIP LOCKED or NOWAIT (both probe queries fail), THE RDBMS_Event_Persistenter SHALL use `FOR UPDATE` with deterministic ordering by retried_count ascending and ID descending (`ORDER BY retried_count ASC, id DESC`) to deprioritize repeatedly-failing events and reduce deadlock risk.
 7. THE RDBMS_Event_Persistenter SHALL automatically create the Persistent_Event_Table at startup if the table does not exist.
 8. THE Event_Persistenter SHALL use the database connection managed by Spring's DataSourceUtils to participate in the current transaction.
+9. WHEN running on Oracle, THE OracleEventPersistenter SHALL use Oracle `ROWID` (instead of the `id` primary key) as the row identifier in both retrieval and confirmation queries. This is because Oracle JDBC's `Statement.RETURN_GENERATED_KEYS` returns the ROWID by default (not the sequence-generated `id`), so using ROWID in retrieval and confirmation keeps the identifier consistent across all code paths. ROWID also provides faster row access than a primary key index lookup since it is the physical row address. The confirm SQL SHALL use `WHERE rowid=?`, and `fillDbId()` SHALL use `PreparedStatement.setString()` since ROWID is a string value. Note: ROWID can become stale if the row is physically moved (e.g., `ALTER TABLE ... MOVE`, `SHRINK SPACE`, partition operations). If this happens, the confirmation silently updates zero rows, and the event remains unconfirmed until the next retry cycle re-retrieves it with a fresh ROWID — no data loss occurs.
+10. WHEN running on Oracle, THE OracleEventPersistenter's `getOrderedBaseRetrieveSql()` SHALL NOT include a `FETCH FIRST n ROWS ONLY` clause, because Oracle raises ORA-02014 when `FOR UPDATE` is combined with `FETCH FIRST` (Oracle treats it as a view-like construct incompatible with `FOR UPDATE`). Row limiting SHALL be enforced by the `AbstractRdbmsEventPersistenter.retrieveUnconfirmedEvent()` loop guard (`eventCount < Constants.RETRY_BATCH_COUNT`).
+11. WHEN running on Oracle, THE OracleEventPersistenter SHALL use `systimestamp - INTERVAL '10' second` for the update_time staleness comparison, because Oracle uses `systimestamp` as the native high-precision timestamp function (not `now()` or `current_timestamp`).
 
 ### Requirement 4: Event Persistence for MongoDB
 
@@ -277,7 +284,28 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 3. WHEN running on Spring Boot 4.x with Spring Cloud 2025.1.0, THE Whistle library SHALL function correctly with the Spring Cloud Stream RabbitMQ and Kafka binders without referencing any removed or relocated binder classes.
 4. THE Whistle library SHALL NOT directly reference `org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration`, because this class has been relocated to `org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration` in Spring Boot 4.
 
-### Requirement 22: Consistent Retry Ordering Across All Locking Paths
+### Requirement 22: Probe-Based Lock Feature Detection
+
+**User Story:** As a developer, I want the system to probe the database for locking clause support at startup, so that it uses the strongest available locking strategy without relying on fragile version parsing.
+
+#### Acceptance Criteria
+
+1. WHEN the AbstractRdbmsEventPersistenter is constructed, THE LockFeatureProbe SHALL execute a probe for `SKIP LOCKED` support and a probe for `NOWAIT` support against the event table, using `SELECT * FROM <table> WHERE 1=0 FOR UPDATE <clause>` as the probe SQL.
+2. THE LockFeatureProbe SHALL use `WHERE 1=0` in probe SQL to guarantee zero rows are selected or locked, and SHALL roll back the transaction after execution.
+3. THE LockFeatureProbe SHALL close the database connection via try-with-resources after each probe, regardless of outcome.
+4. WHEN a probe SQL execution fails with an SQLException, THE LockFeatureProbe SHALL return false and log the clause name and exception message at DEBUG level.
+5. IF the DataSource cannot provide a connection, THEN THE LockFeatureProbe SHALL return false and log the exception at ERROR level.
+6. THE AbstractRdbmsEventPersistenter SHALL enforce the locking clause priority order: `SKIP LOCKED` > `NOWAIT` > plain `FOR UPDATE`.
+7. THE AbstractRdbmsEventPersistenter SHALL build Retrieve_SQL once during construction and reuse it for all subsequent retrievals.
+8. THE AbstractRdbmsEventPersistenter SHALL set `supportsSkipLocked`, `supportsNowait`, and `retrieveSql` fields once during construction and never mutate them afterward, ensuring thread safety without synchronization.
+9. WHEN the AbstractRdbmsEventPersistenter is constructed, it SHALL follow the sequence: createTable → probe SKIP LOCKED → probe NOWAIT → buildRetrieveSql.
+10. THE Subclass SHALL implement `getOrderedBaseRetrieveSql(int count)` returning the SELECT/WHERE/ORDER BY/LIMIT portion without any locking clause. The base class SHALL append the selected locking clause.
+11. THE AbstractRdbmsEventPersistenter SHALL NOT contain version-based detection methods (`initMetaData()`, `detectSkipLockedSupport()`, `versionGreaterThan()`) or fields (`dbProductName`, `dbProductVersion`).
+12. WHEN `retrieveUnconfirmedEvent` executes, THE AbstractRdbmsEventPersistenter SHALL call `Statement.setQueryTimeout(retrieveTransactionTimeout)` on the Statement before executing the retrieve SQL.
+13. WHEN the query timeout is exceeded, THE AbstractRdbmsEventPersistenter SHALL catch the resulting `SQLException` and return an empty list, logging the exception at ERROR level with the timeout value.
+14. WHEN `retrieveTransactionTimeout` is 0, THE system SHALL disable the query timeout (JDBC spec: unlimited).
+
+### Requirement 23: Consistent Retry Ordering Across All Locking Paths
 
 **User Story:** As a developer, I want all RDBMS event retrieval paths to use consistent ordering by retry count, so that poison events are deprioritized regardless of the database's locking capabilities.
 

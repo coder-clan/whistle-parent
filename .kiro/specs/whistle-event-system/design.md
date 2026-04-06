@@ -173,6 +173,101 @@ All three RDBMS locking paths (SKIP LOCKED, NOWAIT, plain FOR UPDATE) use `getOr
 
 For RDBMS, no schema changes are needed — the `retried_count` and `id` columns already exist. For optimal performance on the fallback path, a composite index on `(retried_count, id DESC)` filtered by `success = false` could be added, but this is optional since the fallback path is only used on older database versions.
 
+### Probe-Based Lock Feature Detection
+
+At startup, `AbstractRdbmsEventPersistenter` probes the database by executing real SQL to determine which locking clauses (`SKIP LOCKED`, `NOWAIT`) are supported. This replaces the previous version-based detection approach, eliminating all version parsing logic and working universally across any database.
+
+Key design principle: subclasses provide only the base SELECT query (database-specific WHERE/LIMIT syntax). The base class owns all locking clause logic — probing, selecting the best strategy, and appending the clause.
+
+#### SQL Syntax Portability
+
+`FOR UPDATE SKIP LOCKED` and `FOR UPDATE NOWAIT` are not part of the SQL standard (ISO/IEC 9075). They are vendor extensions. However, all databases this project supports (PostgreSQL, MySQL, MariaDB, Oracle, H2) use identical syntax for both clauses. No vendor spells them differently. SQL Server is the notable exception — it uses `WITH (UPDLOCK, READPAST)` instead of `FOR UPDATE SKIP LOCKED`. This project does not have a SQL Server persistenter, so this is not a current concern. If SQL Server support is added in the future, the probe would correctly return `false` for the standard syntax, triggering the plain `FOR UPDATE` fallback.
+
+#### Transaction Timeout for Deadlock Protection
+
+When `SKIP LOCKED` is not available and the system falls back to plain `FOR UPDATE`, concurrent retrier threads can deadlock. A configurable transaction timeout (`retrieveTransactionTimeout`, default 5 seconds) ensures the connection is released after a bounded time, preventing indefinite blocking. Even with `SKIP LOCKED` or `NOWAIT`, a timeout is a good safety net for lock-related edge cases.
+
+The timeout is applied via `Statement.setQueryTimeout(seconds)`. This approach is chosen over `Connection.setNetworkTimeout()` because `retrieveUnconfirmedEvent` uses a Spring-managed connection (`DataSourceUtils.getConnection`), and `setQueryTimeout` avoids interfering with the connection pool's own timeout settings while working across all JDBC drivers.
+
+#### Probe Algorithm
+
+```java
+static boolean probeFeature(DataSource dataSource, String tableName, String clause) {
+    try (Connection conn = dataSource.getConnection()) {
+        conn.setAutoCommit(false);
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("SELECT * FROM " + tableName + " WHERE 1=0 FOR UPDATE " + clause);
+        }
+        conn.rollback();
+        return true;
+    } catch (SQLException e) {
+        log.debug("Probe for '{}' not supported: {}", clause, e.getMessage());
+        return false;
+    }
+}
+```
+
+- `WHERE 1=0` ensures zero rows are touched
+- Connection is always closed via try-with-resources
+- Transaction is rolled back on success, auto-rolled-back on exception when connection closes
+
+#### Constructor Startup Sequence
+
+```mermaid
+graph TD
+    subgraph Startup
+        A[Constructor] --> B[createTable]
+        B --> C[probeFeature: SKIP LOCKED]
+        B --> D[probeFeature: NOWAIT]
+        C --> E{success?}
+        D --> F{success?}
+        E -- yes --> G[lockClause = SKIP LOCKED]
+        E -- no --> F
+        F -- yes --> H[lockClause = NOWAIT]
+        F -- no --> I[lockClause = empty]
+        G --> J[retrieveSql = orderedBaseQuery + lockClause]
+        H --> J
+        I --> J
+    end
+
+    subgraph Runtime
+        K[FailedEventRetrier] --> L[retrieveUnconfirmedEvent]
+        L --> M[Statement.setQueryTimeout]
+        M --> N[Execute pre-built retrieveSql]
+    end
+```
+
+```
+1. createTable()
+2. supportsSkipLocked = LockFeatureProbe.probeFeature(ds, table, "SKIP LOCKED")
+3. supportsNowait     = LockFeatureProbe.probeFeature(ds, table, "NOWAIT")
+4. retrieveSql        = buildRetrieveSql(RETRY_BATCH_COUNT)
+5. this.retrieveTransactionTimeout = retrieveTransactionTimeout
+```
+
+#### buildRetrieveSql
+
+```java
+private String buildRetrieveSql(int count) {
+    if (supportsSkipLocked) {
+        return getOrderedBaseRetrieveSql(count) + " for update skip locked";
+    } else if (supportsNowait) {
+        return getOrderedBaseRetrieveSql(count) + " for update nowait";
+    } else {
+        return getOrderedBaseRetrieveSql(count) + " for update";
+    }
+}
+```
+
+#### Subclass getOrderedBaseRetrieveSql Summary
+
+| Subclass | `getOrderedBaseRetrieveSql` returns |
+|---|---|
+| H2 | `SELECT id, ... WHERE ... ORDER BY retried_count ASC, id DESC LIMIT n` |
+| MySQL | `SELECT id, ... WHERE ... ORDER BY retried_count ASC, id DESC LIMIT n` |
+| PostgreSQL | `SELECT id, ... WHERE ... ORDER BY retried_count ASC, id DESC LIMIT n` |
+| Oracle | `SELECT rowid, ... WHERE ... ORDER BY retried_count ASC, id DESC` (no LIMIT — ORA-02014 prevents FETCH FIRST with FOR UPDATE; row limiting enforced by Java-side loop guard; uses `systimestamp` for timestamp comparison) |
+
 The project is organized as a multi-module Maven project (version 1.2.0):
 
 | Module | Purpose |
@@ -366,7 +461,7 @@ sequenceDiagram
 | `AbstractRdbmsEventPersistenter` | Template Method base for RDBMS. Handles table creation, SKIP LOCKED detection, insert/confirm/retrieve logic. Uses `DataSourceUtils.getConnection()` for TX participation. All locking paths use `getOrderedBaseRetrieveSql()` with `ORDER BY retried_count ASC, id DESC` |
 | `MysqlEventPersistenter` | MySQL-specific SQL (AUTO_INCREMENT, `now()` syntax) |
 | `PostgresqlEventPersistenter` | PostgreSQL-specific SQL (bigserial, trigger for update_time) |
-| `OracleEventPersistenter` | Oracle-specific SQL (SEQUENCE, NUMBER types, TRIGGER) |
+| `OracleEventPersistenter` | Oracle-specific SQL (SEQUENCE, NUMBER types, TRIGGER). Uses `ROWID` instead of `id` for row identification in retrieval and confirmation — consistent with Oracle JDBC's default `getGeneratedKeys()` behavior which returns ROWID, and provides faster direct physical row access. Omits `FETCH FIRST n ROWS ONLY` from retrieve SQL because Oracle raises ORA-02014 when combined with `FOR UPDATE`; row limiting is enforced by the Java-side loop guard. Uses `systimestamp` for timestamp comparison |
 | `H2EventPersistenter` | H2-specific SQL (AUTO_INCREMENT, ON UPDATE CURRENT_TIMESTAMP) |
 | `LockFeatureProbe` | Utility class that probes the database at startup to determine whether `FOR UPDATE SKIP LOCKED` and `FOR UPDATE NOWAIT` are supported. Executes `SELECT * FROM <table> WHERE 1=0 FOR UPDATE <clause>` inside a rolled-back transaction. Side-effect-free and safe to run at startup |
 | `MongodbEventPersistenter` | MongoDB implementation using `MongoTemplate`. Compound partial index on `{retry: 1, _id: -1}` filtered for `confirmed:false` |
@@ -451,6 +546,12 @@ Default table name: `sys_event_out` (configurable via `org.coderclan.whistle.per
 | `update_time` | `timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | `timestamp DEFAULT CURRENT_TIMESTAMP` (trigger-updated) | `TIMESTAMP DEFAULT current_timestamp` (trigger-updated) | `timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` |
 
 PostgreSQL and Oracle use database triggers to auto-update `update_time` on row modification.
+
+Oracle-specific note: Although the `id` column exists as the primary key, `OracleEventPersistenter` uses Oracle `ROWID` (a pseudo-column) instead of `id` for row identification in retrieval and confirmation queries. The primary reason is that Oracle JDBC's `Statement.RETURN_GENERATED_KEYS` returns the ROWID by default (not the sequence-generated `id`), so `persistEvent()` naturally returns a ROWID. Using ROWID consistently in retrieval (`SELECT rowid, ...`) and confirmation (`WHERE rowid=?`) keeps the identifier uniform across all code paths. ROWID also provides faster row access than a primary key index lookup since it is the direct physical row address. The confirm SQL uses `WHERE rowid=?` and `fillDbId()` uses `PreparedStatement.setString()` since ROWID is a string value.
+
+Trade-off: ROWID can become stale if the row is physically moved by DBA operations such as `ALTER TABLE ... MOVE`, `SHRINK SPACE`, partition reorganization, or Data Pump export/import. If this happens between event retrieval and confirmation, the `UPDATE ... WHERE rowid=?` silently updates zero rows, leaving the event unconfirmed. The retry mechanism will re-retrieve the event with a fresh ROWID in the next cycle, so no data loss occurs. An alternative would be to use `prepareStatement(sql, new String[]{"ID"})` to get the sequence-generated `id` from `getGeneratedKeys()` and use `WHERE id=?` for confirmation — this would be stable across table reorganization but slightly slower due to index lookup. The current ROWID approach is preferred because table reorganization on a live event table is rare in practice.
+
+Additionally, Oracle's retrieve SQL omits `FETCH FIRST n ROWS ONLY` because Oracle raises ORA-02014 when `FOR UPDATE` is combined with `FETCH FIRST`; row limiting is enforced by the Java-side loop guard (`eventCount < RETRY_BATCH_COUNT`). The staleness filter uses `systimestamp - INTERVAL '10' second` (Oracle's native high-precision timestamp function).
 
 ### MongoEvent (MongoDB Document)
 
@@ -568,7 +669,7 @@ spring.cloud.stream.kafka.default.producer.recordMetadataChannel=coderclan-whist
 
 *For any* database, the `AbstractRdbmsEventPersistenter` SHALL generate a retrieve SQL containing `SKIP LOCKED` if and only if the runtime SQL probe (`LockFeatureProbe.probeFeature()` executing `SELECT * FROM <table> WHERE 1=0 FOR UPDATE SKIP LOCKED`) succeeds at startup. If the SKIP LOCKED probe fails but the NOWAIT probe succeeds, the SQL SHALL contain `FOR UPDATE NOWAIT`. Otherwise, the SQL SHALL use `ORDER BY retried_count ASC, id DESC` with `FOR UPDATE`. All locking paths (SKIP LOCKED, NOWAIT, plain FOR UPDATE) SHALL include `ORDER BY retried_count ASC, id DESC` to ensure poison events are deprioritized.
 
-**Validates: Requirements 3.4, 3.5, 3.6, 22.1, 22.2, 22.3**
+**Validates: Requirements 3.4, 3.5, 3.6, 23.1, 23.2, 23.3**
 
 ### Property 13: MongoDB persist creates document with correct defaults
 
@@ -694,19 +795,49 @@ spring.cloud.stream.kafka.default.producer.recordMetadataChannel=coderclan-whist
 
 *For any* combination of `(supportsSkipLocked, supportsNowait)` and any positive count value, the `buildRetrieveSql()` method SHALL produce SQL containing `ORDER BY retried_count ASC, id DESC`, regardless of which locking strategy is selected. This ensures poison events with high retry counts are deprioritized across all database locking modes.
 
-**Validates: Requirements 22.1, 22.2, 22.3**
+**Validates: Requirements 23.1, 23.2, 23.3**
 
 ### Property 34: Locking clauses unchanged after ordering fix
 
 *For any* combination of `(supportsSkipLocked, supportsNowait)` and any positive count value, the `buildRetrieveSql()` method SHALL produce SQL with the correct locking clause suffix: `for update skip locked` when `supportsSkipLocked=true`, `for update nowait` when `supportsNowait=true` and `supportsSkipLocked=false`, and `for update` otherwise.
 
-**Validates: Requirements 22.4, 22.5, 22.6**
+**Validates: Requirements 23.4, 23.5, 23.6**
 
 ### Property 35: Dead code removal — getBaseRetrieveSql() removed
 
 *For any* subclass of `AbstractRdbmsEventPersistenter` (MysqlEventPersistenter, PostgresqlEventPersistenter, OracleEventPersistenter, H2EventPersistenter), the class SHALL NOT declare a `getBaseRetrieveSql(int)` method, and `AbstractRdbmsEventPersistenter` itself SHALL NOT declare an abstract `getBaseRetrieveSql(int)` method, confirming the dead code has been removed.
 
-**Validates: Requirements 22.8**
+**Validates: Requirements 23.8**
+
+### Property 36: Probe is side-effect-free
+
+*For any* table state (with zero or more rows) and *for any* clause string (valid or invalid), executing `LockFeatureProbe.probeFeature()` SHALL leave the table row count unchanged.
+
+**Validates: Requirements 22.1, 22.2, 22.3**
+
+### Property 37: Locking clause priority selection
+
+*For any* combination of `(supportsSkipLocked, supportsNowait)` boolean values, `buildRetrieveSql` SHALL select the locking clause following the strict priority: if `supportsSkipLocked` is true, the result contains `SKIP LOCKED`; else if `supportsNowait` is true, the result contains `NOWAIT`; else the result uses plain `FOR UPDATE`.
+
+**Validates: Requirements 22.6**
+
+### Property 38: Retrieve SQL always contains FOR UPDATE
+
+*For any* combination of probe results, the constructed retrieve SQL SHALL always contain the substring `FOR UPDATE`.
+
+**Validates: Requirements 22.6, 22.7**
+
+### Property 39: Ordered base queries contain no locking clauses
+
+*For any* positive count value, the string returned by `getOrderedBaseRetrieveSql(count)` SHALL NOT contain `FOR UPDATE`, `SKIP LOCKED`, or `NOWAIT`.
+
+**Validates: Requirements 22.10**
+
+### Property 40: Query timeout is always applied
+
+*For any* positive `retrieveTransactionTimeout` value, the `Statement` used in `retrieveUnconfirmedEvent` SHALL have `setQueryTimeout` called with that value before query execution.
+
+**Validates: Requirements 22.12, 22.13**
 
 ## Error Handling
 
@@ -748,7 +879,13 @@ The Whistle system employs a layered error handling strategy:
 
 6. **SKIP LOCKED / NOWAIT Detection (LockFeatureProbe)**: Database feature probing failures are expected and recoverable.
    - Log level: DEBUG for probe failures (feature not available). Logged: clause name, SQL error message.
+   - Log level: ERROR for DataSource connection failures during probing (connection failure is critical). Logged: exception message, stack trace.
    - Log level: INFO for locking strategy result (logged by `AbstractRdbmsEventPersistenter` constructor, not `LockFeatureProbe`). Logged: table name, selected strategy (SKIP LOCKED / NOWAIT / FOR UPDATE).
+   - Log level: INFO for `retrieveTransactionTimeout` value at startup. Logged: table name, timeout value in seconds.
+
+7. **Query Timeout**: When the retrieve query exceeds `retrieveTransactionTimeout`, the JDBC driver throws `SQLException`, which is caught by the existing catch block in `retrieveUnconfirmedEvent`. Returns empty list.
+   - Log level: ERROR. Logged: exception message, timeout value.
+   - When `retrieveTransactionTimeout` is 0: JDBC spec defines 0 as no timeout (unlimited). This is an escape hatch if users want to disable the safety net.
 
 ## Testing Strategy
 
@@ -799,6 +936,11 @@ Testing for Whistle requires both unit tests and property-based tests:
 - **All locking paths ordered** (Property 33): Generate `(supportsSkipLocked, supportsNowait, count)` combinations, verify ORDER BY in all paths.
 - **Locking clause preservation** (Property 34): Verify correct locking suffix for each path.
 - **Dead code removal** (Property 35): Verify `getBaseRetrieveSql(int)` is not declared on any persistenter class.
+- **Probe side-effect-free** (Property 36): Execute probes against embedded H2, verify table row count unchanged.
+- **Locking clause priority** (Property 37): Generate `(supportsSkipLocked, supportsNowait)` combinations, verify priority selection.
+- **Always FOR UPDATE** (Property 38): Verify all `buildRetrieveSql` outputs contain `FOR UPDATE`.
+- **No locking in base queries** (Property 39): Verify `getOrderedBaseRetrieveSql` output contains no locking clauses.
+- **Query timeout applied** (Property 40): Verify `setQueryTimeout` is called with configured value before query execution.
 
 ### Maven Profile-Based Multi-Version Verification
 

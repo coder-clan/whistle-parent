@@ -77,7 +77,7 @@ class LockFeatureProbeProperties {
     }
 
     @Property
-    @Tag("Feature: probe-lock-feature-detection, Property 1: Probe is side-effect-free")
+    @Tag("Feature: whistle-event-system, Property 36: Probe is side-effect-free")
     void probeFeatureDoesNotChangeRowCount(
             @ForAll("rowCounts") int initialRows,
             @ForAll("clauseStrings") String clause
@@ -111,7 +111,7 @@ class LockFeatureProbeProperties {
      * true or false without throwing any exception.
      */
     @Property
-    @Tag("Feature: probe-lock-feature-detection, Property 1 corollary: Probe never throws")
+    @Tag("Feature: whistle-event-system, Property 36 corollary: Probe never throws")
     void probeFeatureNeverThrows(
             @ForAll("clauseStrings") String clause
     ) throws SQLException {
