@@ -60,10 +60,11 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 1. WHEN an event is persisted, THE RDBMS_Event_Persistenter SHALL insert a row into the Persistent_Event_Table containing the event type name and the JSON-serialized event content, and return the generated database primary key as the persistent event ID.
 2. WHEN an event delivery is confirmed, THE RDBMS_Event_Persistenter SHALL update the corresponding row in the Persistent_Event_Table to mark the event as successfully delivered.
 3. WHEN unconfirmed events are retrieved for retry, THE RDBMS_Event_Persistenter SHALL select events from the Persistent_Event_Table that are not marked as successful and whose update time is older than 10 seconds, increment the retry count for each retrieved event, and return a batch of up to 32 events.
-4. WHEN the database supports SKIP LOCKED (MySQL 8.0+, PostgreSQL 9.5+, Oracle 9.0+, MariaDB 10.3+, H2 1.5+), THE RDBMS_Event_Persistenter SHALL use `FOR UPDATE SKIP LOCKED` in the retrieval query to avoid blocking on locked rows.
-5. WHEN the database does not support SKIP LOCKED, THE RDBMS_Event_Persistenter SHALL use `FOR UPDATE` with deterministic ordering by retried_count ascending and ID descending (`ORDER BY retried_count ASC, id DESC`) to deprioritize repeatedly-failing events and reduce deadlock risk.
-6. THE RDBMS_Event_Persistenter SHALL automatically create the Persistent_Event_Table at startup if the table does not exist.
-7. THE Event_Persistenter SHALL use the database connection managed by Spring's DataSourceUtils to participate in the current transaction.
+4. WHEN the database supports SKIP LOCKED (detected at startup by executing a probe query `SELECT * FROM <table> WHERE 1=0 FOR UPDATE SKIP LOCKED` via `LockFeatureProbe`), THE RDBMS_Event_Persistenter SHALL use `ORDER BY retried_count ASC, id DESC` with `FOR UPDATE SKIP LOCKED` in the retrieval query to deprioritize poison events and avoid blocking on locked rows.
+5. WHEN the database supports NOWAIT but not SKIP LOCKED (detected at startup by executing a probe query `SELECT * FROM <table> WHERE 1=0 FOR UPDATE NOWAIT` via `LockFeatureProbe`), THE RDBMS_Event_Persistenter SHALL use `ORDER BY retried_count ASC, id DESC` with `FOR UPDATE NOWAIT` in the retrieval query to deprioritize poison events.
+6. WHEN the database does not support SKIP LOCKED or NOWAIT (both probe queries fail), THE RDBMS_Event_Persistenter SHALL use `FOR UPDATE` with deterministic ordering by retried_count ascending and ID descending (`ORDER BY retried_count ASC, id DESC`) to deprioritize repeatedly-failing events and reduce deadlock risk.
+7. THE RDBMS_Event_Persistenter SHALL automatically create the Persistent_Event_Table at startup if the table does not exist.
+8. THE Event_Persistenter SHALL use the database connection managed by Spring's DataSourceUtils to participate in the current transaction.
 
 ### Requirement 4: Event Persistence for MongoDB
 
@@ -86,7 +87,7 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 2. WHEN the PostgreSQL JDBC driver (`org.postgresql.Driver`) is on the classpath and a DataSource bean exists, THE Whistle_Configuration SHALL create a PostgresqlEventPersistenter bean.
 3. WHEN the Oracle JDBC driver (`oracle.jdbc.OracleDriver`) is on the classpath and a DataSource bean exists, THE Whistle_Configuration SHALL create an OracleEventPersistenter bean.
 4. WHEN the H2 JDBC driver (`org.h2.Driver`) is on the classpath and a DataSource bean exists, THE Whistle_Configuration SHALL create an H2EventPersistenter bean.
-5. WHEN MongoClientSettings is available and Spring Data MongoDB is on the classpath, THE Whistle_MongoDB_Configuration SHALL create a MongodbEventPersistenter bean.
+5. WHEN `MongoCustomConversions` is on the classpath (class-level `@ConditionalOnClass`) and a `MongoClientSettings` bean exists (bean-level `@ConditionalOnBean`), THE Whistle_MongoDB_Configuration SHALL create a MongodbEventPersistenter bean.
 6. THE Whistle_Configuration SHALL use `@ConditionalOnMissingBean` on all persistenter beans, allowing developers to provide custom implementations that override the defaults.
 
 ### Requirement 6: Failed Event Retry
@@ -159,7 +160,7 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 2. THE Whistle_Configuration_Properties SHALL expose an `applicationName` property under the `org.coderclan.whistle` prefix, defaulting to `spring.application.name` if not explicitly set.
 3. THE Whistle_Configuration_Properties SHALL expose a `persistentTableName` property (default: `sys_event_out`) under the `org.coderclan.whistle` prefix to control the database table name for event persistence.
 4. IF the Application_Name is null or empty at startup, THEN THE Whistle_Configuration SHALL throw an IllegalStateException.
-5. THE Whistle_Configuration_Properties SHALL support the deprecated property `org.coderclan.whistle.table.producedEvent` as a fallback for `persistentTableName` for backward compatibility.
+5. THE Whistle_Configuration_Properties SHALL expose a `retrieveTransactionTimeout` property (default: 5 seconds) under the `org.coderclan.whistle` prefix to control the query timeout for the event retrieval `SELECT ... FOR UPDATE` statement, protecting against deadlocks when SKIP LOCKED is not available.
 
 ### Requirement 12: Spring Boot Auto-Configuration
 
@@ -167,7 +168,7 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 
 #### Acceptance Criteria
 
-1. THE Whistle module SHALL register `WhistleConfiguration` and `WhistleMongodbConfiguration` as auto-configuration classes via both `spring.factories` (Spring Boot 2.x) and `AutoConfiguration.imports` (Spring Boot 3.x).
+1. THE Whistle module SHALL register `WhistleJacksonConfiguration`, `WhistleConfiguration`, and `WhistleMongodbConfiguration` as auto-configuration classes via both `spring.factories` (Spring Boot 2.x) and `AutoConfiguration.imports` (Spring Boot 3.x / 4.x).
 2. THE Whistle_Configuration SHALL auto-configure after `DataSourceAutoConfiguration` and `WhistleMongodbConfiguration`.
 3. THE Whistle_Configuration SHALL provide default beans for Event_Service, Transactional_Event_Handler, Event_Type_Registrar, Service_Activators, Event_Sender, and Event_Content_Serializer, each guarded by `@ConditionalOnMissingBean`.
 4. THE Whistle_Configuration SHALL load default Spring Cloud Stream properties from `spring-cloud-stream.properties`, including RabbitMQ publisher confirm settings, Kafka auto-create topics, Kafka minimum partition count of 8, and consumer dead-letter queue configuration.
@@ -213,12 +214,12 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 
 #### Acceptance Criteria
 
-1. WHEN running on Spring Boot 2.x or 3.x, THE Whistle library SHALL support both `javax.annotation.PostConstruct` and `jakarta.annotation.PostConstruct` lifecycle annotations.
-2. WHEN running on Spring Boot 4.x (Spring Framework 7), THE Whistle library SHALL use only `jakarta.annotation.PostConstruct`, because Spring Framework 7 only processes `jakarta.annotation.PostConstruct` and `javax.annotation.PostConstruct` is not on the default classpath.
+1. THE Whistle library SHALL use `InitializingBean.afterPropertiesSet()` instead of any `@PostConstruct` annotation for initialization logic, ensuring compatibility with Spring Boot 2.x, 3.x, and 4.x without depending on either `javax.annotation.PostConstruct` or `jakarta.annotation.PostConstruct`.
+2. THE Whistle library SHALL NOT use `@javax.annotation.PostConstruct` or `@jakarta.annotation.PostConstruct` annotations, because `InitializingBean` is a Spring Framework core interface that works identically across all Spring Boot versions.
 3. THE Whistle module SHALL declare `jakarta.annotation-api` as a `provided` scope dependency, so that it is available at compile time but does not force a transitive dependency on applications.
 4. THE `javax.sql.DataSource` usage SHALL NOT require any javax/jakarta migration handling, as it is part of the Java SE standard library (`java.sql` module) and is unaffected by the Jakarta EE namespace change.
 5. THE Whistle library SHALL NOT use any other javax.* APIs from Java EE (e.g., `javax.inject`, `javax.persistence`) that would require jakarta migration, relying solely on Spring Framework annotations for dependency injection and configuration.
-6. WHEN targeting Spring Boot 4.x compatibility, THE Whistle_Configuration SHALL remove the `@javax.annotation.PostConstruct` annotation and retain only `@jakarta.annotation.PostConstruct`.
+6. THE Whistle_Configuration SHALL implement `InitializingBean` and perform all initialization logic (application name validation, event consumer registration, event type overlap check) in the `afterPropertiesSet()` method.
 
 ### Requirement 17: MongoDB Custom Converters
 
@@ -238,7 +239,7 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 
 1. THE Whistle module SHALL provide `META-INF/spring.factories` for Spring Boot 2.x auto-configuration discovery.
 2. THE Whistle module SHALL provide `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` for Spring Boot 3.x and 4.x auto-configuration discovery.
-3. BOTH auto-configuration registration files SHALL reference the same configuration classes (`WhistleConfiguration` and `WhistleMongodbConfiguration`).
+3. BOTH auto-configuration registration files SHALL reference the same configuration classes (`WhistleJacksonConfiguration`, `WhistleConfiguration`, and `WhistleMongodbConfiguration`).
 4. THE auto-configuration SHALL function identically on Spring Boot 2.x, Spring Boot 3.x, and Spring Boot 4.x, with no behavioral differences.
 5. WHEN running on Spring Boot 4.x, THE Whistle module SHALL rely solely on `AutoConfiguration.imports` for auto-configuration discovery, because `spring.factories` is no longer used for auto-configuration registration in Spring Boot 4.
 
@@ -249,7 +250,7 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 #### Acceptance Criteria
 
 1. WHEN running on Spring Boot 4.x, THE Whistle_Configuration SHALL reference `org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration` in its `@AutoConfigureAfter` annotation, instead of the relocated `org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration`.
-2. WHEN running on Spring Boot 4.x, THE Whistle_MongoDB_Configuration SHALL reference `org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration` in its `@AutoConfigureAfter` and `@ConditionalOnClass` annotations, instead of the relocated `org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration`.
+2. WHEN running on Spring Boot 4.x, THE Whistle_MongoDB_Configuration SHALL reference `org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration` in its `@AutoConfigureAfter` annotation, instead of the relocated `org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration`. The class-level `@ConditionalOnClass` SHALL use `MongoCustomConversions.class` (stable across all Spring Boot versions) rather than `MongoAutoConfiguration`.
 3. THE Whistle library SHALL ensure that both WhistleConfiguration and WhistleMongodbConfiguration can be loaded by the Spring Boot 4 auto-configuration mechanism without throwing `ClassNotFoundException` or requiring manual exclusion.
 4. IF the old auto-configuration class path is not found at runtime, THEN THE Whistle library SHALL gracefully fall back to the new package path, or use a version-adaptive strategy to reference the correct class.
 
@@ -276,81 +277,17 @@ Whistle is a reliable event delivering and consuming library for Java Spring Boo
 3. WHEN running on Spring Boot 4.x with Spring Cloud 2025.1.0, THE Whistle library SHALL function correctly with the Spring Cloud Stream RabbitMQ and Kafka binders without referencing any removed or relocated binder classes.
 4. THE Whistle library SHALL NOT directly reference `org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration`, because this class has been relocated to `org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration` in Spring Boot 4.
 
+### Requirement 22: Consistent Retry Ordering Across All Locking Paths
 
----
+**User Story:** As a developer, I want all RDBMS event retrieval paths to use consistent ordering by retry count, so that poison events are deprioritized regardless of the database's locking capabilities.
 
-## Addendum: Bugfix — Retrieve SQL Missing ORDER BY for SKIP LOCKED and NOWAIT Paths
+#### Acceptance Criteria
 
-### Introduction
-
-In `AbstractRdbmsEventPersistenter.buildRetrieveSql()`, the `ORDER BY retried_count ASC, id DESC` clause is only applied when the database does not support SKIP LOCKED or NOWAIT (the plain `FOR UPDATE` fallback path). The SKIP LOCKED and NOWAIT paths call `getBaseRetrieveSql()` which returns SQL without any ordering. This means on databases that support SKIP LOCKED (MySQL 8.0+, PostgreSQL 9.5+, Oracle 9.0+, H2 1.5+) or NOWAIT, poison events with high retry counts are retrieved with equal priority to fresh events, potentially blocking normal event processing.
-
-### Bug Analysis
-
-#### Current Behavior (Defect)
-
-1.1 WHEN the database supports SKIP LOCKED, THEN the system generates a retrieve SQL using `getBaseRetrieveSql()` which contains NO `ORDER BY` clause, causing events with high `retried_count` (poison events) to be retrieved with equal priority to fresh events.
-
-1.2 WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system generates a retrieve SQL using `getBaseRetrieveSql()` which contains NO `ORDER BY` clause, causing events with high `retried_count` (poison events) to be retrieved with equal priority to fresh events.
-
-#### Expected Behavior (Correct)
-
-2.1 WHEN the database supports SKIP LOCKED, THEN the system SHALL generate a retrieve SQL using `getOrderedBaseRetrieveSql()` which includes `ORDER BY retried_count ASC, id DESC`, so that fresh events (low retry count) are prioritized over poison events (high retry count).
-
-2.2 WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system SHALL generate a retrieve SQL using `getOrderedBaseRetrieveSql()` which includes `ORDER BY retried_count ASC, id DESC`, so that fresh events (low retry count) are prioritized over poison events (high retry count).
-
-2.3 WHEN the database supports neither SKIP LOCKED nor NOWAIT, THEN the system SHALL CONTINUE TO generate a retrieve SQL using `getOrderedBaseRetrieveSql()` with `ORDER BY retried_count ASC, id DESC` and append `FOR UPDATE`.
-
-#### Unchanged Behavior (Regression Prevention)
-
-3.1 WHEN the database supports SKIP LOCKED, THEN the system SHALL CONTINUE TO append `FOR UPDATE SKIP LOCKED` to the retrieve SQL.
-
-3.2 WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system SHALL CONTINUE TO append `FOR UPDATE NOWAIT` to the retrieve SQL.
-
-3.3 WHEN the database supports neither SKIP LOCKED nor NOWAIT, THEN the system SHALL CONTINUE TO append `FOR UPDATE` to the retrieve SQL.
-
-3.4 WHEN unconfirmed events are retrieved for retry, THEN the system SHALL CONTINUE TO return a batch of up to 32 events with incremented retry counts.
-
-### Bug Condition
-
-```pascal
-FUNCTION isBugCondition(X)
-  INPUT: X of type LockingStrategy
-  OUTPUT: boolean
-
-  // Returns true when the database supports SKIP LOCKED or NOWAIT,
-  // i.e., the paths that currently use unordered getBaseRetrieveSql()
-  RETURN X.supportsSkipLocked = true OR X.supportsNowait = true
-END FUNCTION
-```
-
-### Property Specification
-
-```pascal
-// Property: Fix Checking — All locking paths use ordered SQL
-FOR ALL X WHERE isBugCondition(X) DO
-  retrieveSql ← buildRetrieveSql'(RETRY_BATCH_COUNT)
-  ASSERT retrieveSql CONTAINS "ORDER BY retried_count ASC, id DESC"
-END FOR
-```
-
-### Preservation Goal
-
-```pascal
-// Property: Preservation Checking — Non-buggy path unchanged
-FOR ALL X WHERE NOT isBugCondition(X) DO
-  ASSERT buildRetrieveSql(X) = buildRetrieveSql'(X)
-  // Both use getOrderedBaseRetrieveSql() + " for update"
-END FOR
-
-// Property: Preservation Checking — Locking clauses unchanged
-FOR ALL X DO
-  IF X.supportsSkipLocked THEN
-    ASSERT buildRetrieveSql'(X) ENDS WITH "for update skip locked"
-  ELSE IF X.supportsNowait THEN
-    ASSERT buildRetrieveSql'(X) ENDS WITH "for update nowait"
-  ELSE
-    ASSERT buildRetrieveSql'(X) ENDS WITH "for update"
-  END IF
-END FOR
-```
+1. WHEN the database supports SKIP LOCKED, THEN the system SHALL generate a retrieve SQL using `getOrderedBaseRetrieveSql()` which includes `ORDER BY retried_count ASC, id DESC`, so that fresh events (low retry count) are prioritized over poison events (high retry count).
+2. WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system SHALL generate a retrieve SQL using `getOrderedBaseRetrieveSql()` which includes `ORDER BY retried_count ASC, id DESC`, so that fresh events (low retry count) are prioritized over poison events (high retry count).
+3. WHEN the database supports neither SKIP LOCKED nor NOWAIT, THEN the system SHALL CONTINUE TO generate a retrieve SQL using `getOrderedBaseRetrieveSql()` with `ORDER BY retried_count ASC, id DESC` and append `FOR UPDATE`.
+4. WHEN the database supports SKIP LOCKED, THEN the system SHALL CONTINUE TO append `FOR UPDATE SKIP LOCKED` to the retrieve SQL.
+5. WHEN the database supports NOWAIT but not SKIP LOCKED, THEN the system SHALL CONTINUE TO append `FOR UPDATE NOWAIT` to the retrieve SQL.
+6. WHEN the database supports neither SKIP LOCKED nor NOWAIT, THEN the system SHALL CONTINUE TO append `FOR UPDATE` to the retrieve SQL.
+7. WHEN unconfirmed events are retrieved for retry, THEN the system SHALL CONTINUE TO return a batch of up to 32 events with incremented retry counts.
+8. THE `getBaseRetrieveSql()` abstract method SHALL be removed from `AbstractRdbmsEventPersistenter` and all subclasses, as it is dead code after the fix.
