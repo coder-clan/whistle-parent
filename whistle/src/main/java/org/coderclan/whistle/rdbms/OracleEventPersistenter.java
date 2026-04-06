@@ -24,11 +24,13 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
 
     @SuppressWarnings("java:S1192")
     protected String[] getCreateTableSql() {
+        String seqName = "SEQ_" + tableName;
+        String triggerName = "TRIGGER_UPDATE_" + tableName;
         return new String[]{
-                "CREATE SEQUENCE SEQ_SYS_PERSISTENT_EVENT\n",
-                "CREATE TABLE SYS_PERSISTENT_EVENT\n" +
+                "CREATE SEQUENCE " + seqName + "\n",
+                "CREATE TABLE " + tableName + "\n" +
                         "(\n" +
-                        "  ID NUMBER(*, 0) DEFAULT SEQ_SYS_PERSISTENT_EVENT.NEXTVAL NOT NULL \n" +
+                        "  ID NUMBER(*, 0) DEFAULT " + seqName + ".NEXTVAL NOT NULL \n" +
                         ", EVENT_TYPE VARCHAR2(128 BYTE) NOT NULL \n" +
                         ", RETRIED_COUNT NUMBER(*, 0) DEFAULT 0 NOT NULL \n" +
                         ", EVENT_CONTENT VARCHAR2(2000 BYTE) NOT NULL \n" +
@@ -39,8 +41,8 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
                         "    ID \n" +
                         "  )\n" +
                         ")\n",
-                "CREATE OR REPLACE TRIGGER TRIGGER_UPDATE_SYS_PERSISTENT_EVENT \n" +
-                        "BEFORE UPDATE ON SYS_PERSISTENT_EVENT \n" +
+                "CREATE OR REPLACE TRIGGER " + triggerName + " \n" +
+                        "BEFORE UPDATE ON " + tableName + " \n" +
                         "for each row\n" +
                         "BEGIN\n" +
                         "  :NEW.update_time := current_timestamp;\n" +
@@ -52,7 +54,7 @@ public class OracleEventPersistenter extends AbstractRdbmsEventPersistenter {
     protected String getOrderedBaseRetrieveSql(int count) {
         return "select id,event_type,event_content,retried_count from " + tableName
                 + " where success=0 and update_time<(systimestamp - INTERVAL '10' second ) "
-                + "order by retried_count asc, id desc";
+                + "order by retried_count asc, id desc fetch first " + count + " rows only";
     }
 
 
