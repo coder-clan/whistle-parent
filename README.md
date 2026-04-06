@@ -24,8 +24,26 @@ transactions were rolled back). However, events may be delayed or duplicated, or
 If there is no database transaction, the Whistle can also be used to handle events. but there is no data consistency
 guarantee in this situation.
 
+## Compatibility
+
+| Dimension | Supported Range |
+|---|---|
+| Java | 8, 11, 17, 21, 25 |
+| Spring Boot | 2.x (2.6.4+), 3.x, 4.x |
+| Spring Cloud | 2020.0.4+ (Boot 2.x), 2022.0.x+ (Boot 3.x), 2025.1.0 (Boot 4.x) |
+| Databases | MySQL, PostgreSQL, Oracle, H2, MongoDB |
+| Jackson | Jackson 2 (Spring Boot 2.x/3.x), Jackson 3 (Spring Boot 4.x) — auto-detected |
+
+The javax/jakarta namespace migration (Spring Boot 2.x → 3.x/4.x) is handled transparently. No code changes are needed when upgrading.
+
 ## Change Log
 
+- 1.2.1 Probe-based locking strategy detection and retry ordering improvements.
+    - At startup, the system probes the database with real SQL to detect `FOR UPDATE SKIP LOCKED` and `FOR UPDATE NOWAIT` support, replacing the previous version-based detection. The strongest available locking clause is selected automatically: SKIP LOCKED > NOWAIT > plain FOR UPDATE.
+    - All retrieval paths now use `ORDER BY retried_count ASC, id DESC` to deprioritize poison events (events that repeatedly fail).
+    - Added configurable `retrieveTransactionTimeout` (default 5s) to protect against deadlocks during event retrieval.
+    - Breaking change: The abstract method `getRetrieveSql(int, boolean)` has been replaced by `getOrderedBaseRetrieveSql(int)`. If you have a custom subclass of AbstractRdbmsEventPersistenter, implement `getOrderedBaseRetrieveSql(int)` returning the SELECT/WHERE/ORDER BY/LIMIT portion without any locking clause.
+    - Tested compatibility with Spring Boot 2.x, 3.x, and 4.x on Java 8+.
 - 1.2.0 Added "skip lock" to retrieveSql of RdbmsEventPersistenter to prevent deadlock if underline database support it.
     - Breaking change: The method signature of RdbmsEventPersistenter.getRetrieveSql(int) has been changed to RdbmsEventPersistenter.getRetrieveSql(int, boolean). If you have a custom
       subclass of RdbmsEventPersistenter, please update the method signature accordingly.
@@ -78,8 +96,8 @@ to listen to the commit event of the current Transaction. When the transaction c
 will get events from the ThreadLocal and call <code>
 org.coderclan.whistle.EventSender.send</code> to send events.
 
-<code>FailedEventRetrier</code> will periodically retrieve unconfirmed events from the database and re-put them into the
-BlockingQueue.
+<code>FailedEventRetrier</code> will periodically retrieve unconfirmed events from the database and re-send them via
+<code>EventSender</code>.
 
 For consuming, the Whistle will look for all Spring Beans implementing <code>EventConsumer</code>, and config system properties for these beans
 to let Spring Cloud Stream to use them for consuming. Check <code>WhistleConfiguration.registerEventConsumers()</code> for details.
@@ -130,7 +148,7 @@ used to specific the version of Spring Cloud.
      &lt;/dependencyManagement></pre>
 
 - Implement <code>org.coderclan.whistle.api.EventType</code> and <code>org.coderclan.whistle.api.EventContent</code>.
-  Use Enumeration to define EventType is recommended.
+  Use Enumeration to define EventType is recommended. If you want to share event type definitions between producer and consumer modules, depend on <code>whistle-api</code> (which has zero framework dependencies) in the shared module instead of <code>whistle</code>.
 
 - The Whistle needs to know what <code>EventType</code> will be published. Expose the event types which the system will
   publish As <code>
@@ -202,8 +220,14 @@ Please refer to
 for more. The Whistle has changed some of these configuration items. Please check <code>
 org.coderclan.whistle.spring-cloud-stream.properties</code> for details.
 
-The Whistle introduces some configuration properties to change its behavior, <code>org.coderclan.whistle.*</code>,
-please check the <code>application.yml</code> in the module whistle-example-producer for details.
+The Whistle introduces the following configuration properties under the <code>org.coderclan.whistle</code> prefix:
+
+| Property | Default | Description |
+|---|---|---|
+| <code>applicationName</code> | <code>${spring.application.name}</code> | Globally unique identifier for the service, used as the consumer group name. Required. |
+| <code>retryDelay</code> | <code>10</code> (seconds) | Interval between failed event retry cycles. |
+| <code>persistentTableName</code> | <code>sys_event_out</code> | Database table name for event persistence. |
+| <code>retrieveTransactionTimeout</code> | <code>5</code> (seconds) | Query timeout for the <code>SELECT ... FOR UPDATE</code> statement during event retrieval. Protects against deadlocks when SKIP LOCKED is not available. Set to 0 to disable. |
 
 ## Pitfalls
 
@@ -214,6 +238,8 @@ Table 1. Release train Spring Boot compatibility</code> on <a href="https://spri
 cloud official page</a> for a list of compatibility between Spring Cloud and Spring Boot.
 
 ### Problems of producing and consuming the same EventType in a single system
+
+Producing and consuming the same EventType in a single system is not supported. The Whistle will detect this at startup and throw an <code>IllegalStateException</code>.
 
 If producing and consuming the same EventType in a single system, the Spring Cloud Stream will NOT send the event to
 Broker (i.e. RabbitMQ). This will cause two problems:
